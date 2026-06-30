@@ -83,7 +83,7 @@ def _make_session_override(
 @pytest.fixture
 def test_client(
     db_engine: Any,
-    session_factory: async_sessionmaker[AsyncSession],
+    postgres_url: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[TestClient]:
     """Sync TestClient with database dependency overridden to use the test DB.
@@ -93,12 +93,27 @@ def test_client(
     `settings.database_url` — not the per-request `get_db_session` dependency.
     That engine must be patched to the test DB too, or TestClient startup
     tries to connect to the real (often unreachable) DATABASE_URL.
+
+    Starlette's `TestClient` drives the app from its own event loop, running in
+    a background thread (an AnyIO "blocking portal") — separate from
+    pytest-asyncio's session-scoped loop that `db_engine`/`db_session` run on.
+    Patching in the shared session-scoped `db_engine` here would let its pooled,
+    pre-ping-checked connections get reused across two different event loops:
+    asyncpg ties connections to the loop that created them, so the pre-ping
+    then fails with "Future attached to a different loop". A fresh engine is
+    built per test instead — its first connection is opened lazily, inside the
+    portal's own loop, so it never crosses loops. `db_engine` is still depended
+    on (unused otherwise) purely to guarantee the schema has been created on
+    this Postgres instance before this engine queries it.
     """
     import app.infrastructure.database.session as db_session_module
 
-    monkeypatch.setattr(db_session_module, "engine", db_engine)
-    monkeypatch.setattr(db_session_module, "_session_factory", session_factory)
-    app.dependency_overrides[get_db_session] = _make_session_override(session_factory)
+    engine = create_async_engine(postgres_url, echo=False, pool_pre_ping=True)
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    monkeypatch.setattr(db_session_module, "engine", engine)
+    monkeypatch.setattr(db_session_module, "_session_factory", factory)
+    app.dependency_overrides[get_db_session] = _make_session_override(factory)
     with TestClient(app, raise_server_exceptions=True) as client:
         yield client
     app.dependency_overrides.clear()
