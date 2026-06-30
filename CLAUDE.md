@@ -15,7 +15,6 @@ Gunther is a personal finance API. Its primary function is importing bank transa
 | `banking` | Active | Core feature — Gmail import, transactions, accounts |
 | `finance` | Stub | `GET /api/v1/finance/cash-on-hand` returns hardcoded mock data |
 | `auth` | Stub | `POST /api/v1/auth/token` raises `NotImplementedError` — User domain not yet scaffolded |
-| `item` | Boilerplate example | Full CRUD — not business-relevant, kept as reference |
 
 ## Gmail / OAuth2 setup (one-time)
 
