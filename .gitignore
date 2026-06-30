@@ -45,3 +45,9 @@ Thumbs.db
 # .vscode/ is committed (debug configs, settings)
 .idea/
 *.iml
+
+# ── Dev Containers ───────────────────────────────────────────────────────────
+.devcontainer/devcontainer-lock.json
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+secrets/

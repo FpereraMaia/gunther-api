@@ -118,10 +118,14 @@ def _register_routers(app: FastAPI) -> None:
     from app.presentation.api.v1.auth.router import router as auth_router
 
     app.include_router(auth_router)
-    from app.presentation.api.v1.item.router import router as item_router
 
-    app.include_router(item_router)
-    # Additional domain routers registered here as domains are scaffolded
+    from app.presentation.api.v1.finance.router import router as finance_router
+
+    app.include_router(finance_router)
+
+    from app.presentation.api.v1.banking.router import router as banking_router
+
+    app.include_router(banking_router)
 
 
 def _register_exception_handlers(app: FastAPI) -> None:

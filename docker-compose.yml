@@ -30,6 +30,8 @@ services:
       OTEL_SERVICE_NAME: gunther_api
       CORS_ORIGINS: '["https://gunther_api.localhost"]'
       REDIS_URL: redis://octopus-redis:6379/0
+    volumes:
+      - ./secrets:/workspaces/gunther_api/secrets:ro
     ports:
       - "5678:5678"   # debugpy — only active when APP_DEBUG=true
     networks: [octopus-network]

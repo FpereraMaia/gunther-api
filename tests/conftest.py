@@ -9,8 +9,6 @@ Fixtures available to all tests:
   test_client      — sync  TestClient with get_db_session overridden
   async_client     — async AsyncClient with get_db_session overridden
   db_session       — async AsyncSession (rolled back after each test)
-  item_factory     — factory-boy ItemFactory class (no DB required)
-  fake_item_repo   — fresh InMemoryItemRepository for use-case unit tests
   redis_url        — Redis testcontainer URL (session-scoped)
 """
 from __future__ import annotations
@@ -27,8 +25,6 @@ from app.infrastructure.database.base import Base
 import app.infrastructure.database.models  # noqa: F401 — ensures all tables are in Base.metadata
 from app.infrastructure.database.session import get_db_session
 from app.main import app
-from tests.factories import ItemFactory
-from tests.fakes import InMemoryItemRepository
 
 
 # ── Postgres testcontainer ─────────────────────────────────────────────────────
@@ -110,18 +106,6 @@ async def async_client(
 
 
 # ── Factory and fake-repo fixtures ─────────────────────────────────────────────
-
-@pytest.fixture
-def item_factory() -> type[ItemFactory]:
-    """Return the ItemFactory class — call it to build domain entities."""
-    return ItemFactory
-
-
-@pytest.fixture
-def fake_item_repo() -> InMemoryItemRepository:
-    """Fresh in-memory Item repository — isolated per test, no DB required."""
-    return InMemoryItemRepository()
-
 # ── Redis testcontainer ────────────────────────────────────────────────────────
 
 @pytest.fixture(scope="session")

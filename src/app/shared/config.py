@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     dev_user_email: str = "dev@localhost"
     dev_user_groups: list[str] = []
 
+    # ── Banking / Gmail integration ───────────────────────────────────────────
+    gmail_credentials_path: str = ""   # path to credentials.json from Google Cloud
+    gmail_token_path: str = ""         # path to token.json (written after first auth)
+    c6_zip_password: str = ""          # first 6 digits of CPF
+    c6_gmail_sender: str = "no-reply@c6bank.com.br"
+    nubank_gmail_sender: str = "todomundo@nubank.com.br"
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"

@@ -10,6 +10,21 @@
       "env": {
         "PYTHONPATH": "${workspaceFolder}/src"
       },
+      "envFile": "${workspaceFolder}/.env",
+      "subProcess": true,
+      "jinja": true,
+      "justMyCode": false
+    },
+    {
+      "name": "API — uvicorn (debug, no reload)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["app.main:app", "--port", "8000"],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      },
+      "envFile": "${workspaceFolder}/.env",
       "jinja": true,
       "justMyCode": false
     },
