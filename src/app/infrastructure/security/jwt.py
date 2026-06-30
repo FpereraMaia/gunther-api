@@ -14,9 +14,9 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import jwt
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
 
 from app.domain.auth.value_objects import TokenPayload
 from app.shared.config import settings
@@ -39,7 +39,7 @@ def create_access_token(
         "jti": str(uuid.uuid4()),
         **(extra_claims or {}),
     }
-    return str(jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm))
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
 def decode_token(token: str) -> TokenPayload:
@@ -55,7 +55,7 @@ def decode_token(token: str) -> TokenPayload:
             exp=datetime.fromtimestamp(raw["exp"], tz=UTC),
             jti=raw.get("jti", ""),
         )
-    except (JWTError, KeyError) as exc:
+    except (jwt.PyJWTError, KeyError) as exc:
         raise AuthenticationError("Invalid or expired token") from exc
 
 

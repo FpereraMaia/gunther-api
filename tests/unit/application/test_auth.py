@@ -47,7 +47,7 @@ def test_token_has_unique_jti() -> None:
 
 def test_extra_claims_included() -> None:
     token = create_access_token("u1", extra_claims={"role": "admin"})
-    from jose import jwt as _jwt
+    import jwt as _jwt
 
     from app.shared.config import settings
 
