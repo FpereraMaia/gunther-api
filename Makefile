@@ -20,9 +20,10 @@ help: ## Show this help
 
 install: ## Install dependencies, pre-commit hooks, and git hooks
 	uv sync
-	pre-commit install
-	git config core.hooksPath .github/hooks
-	chmod +x .github/hooks/post-merge
+	git config --unset-all core.hooksPath || true
+	uv run pre-commit install
+	cp .github/hooks/post-merge .git/hooks/post-merge
+	chmod +x .git/hooks/post-merge
 
 dev: ## Hot-reload API locally — breakpoints work in VS Code without Docker
 	PYTHONPATH=src uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir src

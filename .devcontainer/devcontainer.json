@@ -27,7 +27,7 @@
     }
   },
   "remoteUser": "root",
-  "postCreateCommand": "pip install uv && uv sync",
+  "postCreateCommand": "pip install uv && uv sync && uv run pre-commit install && cp .github/hooks/post-merge .git/hooks/post-merge && chmod +x .git/hooks/post-merge",
   "forwardPorts": [8000, 5678],
   "remoteEnv": {
     "PYTHONPATH": "${containerWorkspaceFolder}/src"
