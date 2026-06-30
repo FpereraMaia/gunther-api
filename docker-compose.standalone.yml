@@ -1,0 +1,146 @@
+# Standalone override — bundles all infrastructure so the app runs without Octopus.
+# Useful for demos, onboarding new contributors, or CI pipelines.
+#
+# Usage (via Makefile):
+#   make docker-up    → docker compose -f docker-compose.yml -f docker-compose.standalone.yml up -d
+#   make docker-down  → same with `down`
+#
+# This file MERGES with docker-compose.yml:
+#   - Overrides octopus-network → local bridge (not external)
+#   - Overrides app/worker/migrate environment → local service hostnames
+#   - Adds infrastructure services: postgres, alloy, loki, tempo, prometheus, grafana, adminer
+
+networks:
+  octopus-network:
+    external: false   # override: create a local bridge instead of joining the platform
+    driver: bridge
+
+services:
+  # ── App overrides ─────────────────────────────────────────────────────────────
+  app:
+    ports:
+      - "8000:8000"   # exposed directly (Traefik not available in standalone)
+      - "5678:5678"   # debugpy
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres/gunther_api_db
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      CORS_ORIGINS: '["*"]'
+      REDIS_URL: redis://redis:6379/0
+
+  migrate:
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres/gunther_api_db
+  worker:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres/gunther_api_db
+      REDIS_URL: redis://redis:6379/0
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+
+  # ── Infrastructure ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gunther_api_db
+    volumes:
+      - gunther_api-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [octopus-network]
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --appendfsync everysec
+    volumes:
+      - gunther_api-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks: [octopus-network]
+
+  alloy:
+    image: grafana/alloy:latest
+    volumes:
+      - ./infra/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: run --server.http.listen-addr=0.0.0.0:12345 /etc/alloy/config.alloy
+    networks: [octopus-network]
+
+  loki:
+    image: grafana/loki:3.0.0
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - gunther_api-loki-data:/loki
+      - ./infra/loki/loki.yaml:/etc/loki/local-config.yaml:ro
+    networks: [octopus-network]
+
+  tempo:
+    image: grafana/tempo:latest
+    command: -config.file=/etc/tempo/tempo.yaml
+    volumes:
+      - gunther_api-tempo-data:/var/tempo
+      - ./infra/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+    networks: [octopus-network]
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports: ["9090:9090"]
+    volumes:
+      - gunther_api-prometheus-data:/prometheus
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks: [octopus-network]
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - gunther_api-grafana-data:/var/lib/grafana
+      - ./infra/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./infra/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on: [loki, tempo, prometheus]
+    networks: [octopus-network]
+
+  adminer:
+    image: adminer:latest
+    ports: ["8082:8080"]
+    networks: [octopus-network]
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    ports: ["9093:9093"]
+    volumes:
+      - gunther_api-alertmanager-data:/alertmanager
+      - ./infra/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    networks: [octopus-network]
+
+volumes:
+  gunther_api-postgres-data:
+  gunther_api-redis-data:
+  gunther_api-loki-data:
+  gunther_api-tempo-data:
+  gunther_api-prometheus-data:
+  gunther_api-grafana-data:
+  gunther_api-alertmanager-data:

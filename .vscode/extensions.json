@@ -1,0 +1,17 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.pylance",
+    "ms-python.mypy-type-checker",
+    "charliermarsh.ruff",
+    "ms-azuretools.vscode-docker",
+    "humao.rest-client",
+    "GitHub.copilot",
+    "eamodio.gitlens",
+    "tamasfe.even-better-toml",
+    "redhat.vscode-yaml",
+    "42crunch.vscode-openapi",
+    "bierner.markdown-mermaid",
+    "davidanson.vscode-markdownlint"
+  ]
+}

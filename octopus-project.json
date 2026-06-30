@@ -1,0 +1,18 @@
+{
+  "boilerplate": "python-web",
+  "boilerplate_version": "1.0.0",
+  "service_name": "gunther_api",
+  "project_name": "Gunther API",
+  "description": "test",
+  "author_name": "",
+  "db_name": "gunther_api_db",
+  "docker_registry": "",
+  "octopus_api_url": "http://localhost:8888",
+  "python_version": "3.12",
+  "features": {
+    "redis": true,
+    "background_tasks": true,
+    "auth": true
+  },
+  "scaffolded_at": "2026-06-30T02:43:28Z"
+}

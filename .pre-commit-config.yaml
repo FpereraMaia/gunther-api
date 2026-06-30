@@ -1,0 +1,65 @@
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
+
+repos:
+  # ── Ruff — linting + formatting (fastest) ──────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.7
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # ── Mypy — type checking (uses project venv via uv run) ────────────────────
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        language: system
+        entry: uv run mypy src/
+        pass_filenames: false
+        types: [python]
+
+  # ── Bandit — security linting ──────────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: bandit
+        name: bandit
+        language: system
+        entry: uv run bandit -c pyproject.toml -r src/ -q
+        pass_filenames: false
+        types: [python]
+
+  # ── Semgrep — deep security scanning ──────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: semgrep
+        name: semgrep
+        language: system
+        entry: uv run semgrep scan --config=p/python --config=p/security-audit --error
+        types: [python]
+        pass_filenames: false
+
+  # ── detect-secrets — prevent credential commits ────────────────────────────
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+
+  # ── Commitizen — enforce conventional commits ──────────────────────────────
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.27.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+  # ── docs-env — keep configuration.md in sync with .env.example ────────────
+  - repo: local
+    hooks:
+      - id: docs-env
+        name: Regenerate docs/configuration.md
+        language: system
+        entry: uv run python scripts/gen_docs_env.py
+        files: ^\.env\.example$
+        pass_filenames: false

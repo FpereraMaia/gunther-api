@@ -1,0 +1,75 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API — uvicorn (hot reload)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["app.main:app", "--reload", "--reload-dir", "src", "--port", "8000"],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      },
+      "jinja": true,
+      "justMyCode": false
+    },
+    {
+      "name": "Worker — ARQ",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "app.worker",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      },
+      "jinja": true,
+      "justMyCode": false
+    },
+    {
+      "name": "Test — current file",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["${file}", "-v", "-x", "--no-header"],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      },
+      "jinja": true,
+      "justMyCode": false
+    },
+    {
+      "name": "Test — full suite",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["tests/", "-v", "--no-header"],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      },
+      "jinja": true,
+      "justMyCode": false
+    },
+    {
+      "name": "Attach — Docker container",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 5678
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}/src",
+          "remoteRoot": "/app/src"
+        }
+      ],
+      "justMyCode": false
+    }
+  ],
+  "compounds": [
+    {
+      "name": "API + Worker",
+      "configurations": ["API — uvicorn (hot reload)", "Worker — ARQ"],
+      "stopAll": true
+    }
+  ]
+}

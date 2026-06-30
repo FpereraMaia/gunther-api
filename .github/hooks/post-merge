@@ -1,0 +1,11 @@
+#!/bin/sh
+# Warn when new migration files were pulled — run `make migrate` to apply them.
+changed=$(git diff-tree -r --name-only --no-commit-id ORIG_HEAD HEAD 2>/dev/null | grep "^alembic/versions/")
+if [ -n "$changed" ]; then
+    echo ""
+    echo "  New migration files detected:"
+    echo "$changed" | sed 's/^/    /'
+    echo ""
+    echo "  Run: make migrate"
+    echo ""
+fi

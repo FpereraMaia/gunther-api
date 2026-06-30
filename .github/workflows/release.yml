@@ -1,0 +1,141 @@
+name: Release
+
+# Triggered by pushing a semver tag: git tag v1.2.3 && git push --tags
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+env:
+  SERVICE_NAME: "gunther_api"
+  REGISTRY: ""
+
+jobs:
+  release:
+    name: Build, Sign & Publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      pages: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Parse version from tag (strip leading "v")
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+
+      # ── Docker build ────────────────────────────────────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ vars.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: runtime
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.SERVICE_NAME }}:${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ env.SERVICE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+      # ── Cosign keyless signing (OIDC) ───────────────────────────────────────
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image with Cosign (keyless OIDC — no private key needed)
+        run: |
+          cosign sign --yes \
+            "${{ env.REGISTRY }}/${{ env.SERVICE_NAME }}:${{ github.ref_name }}"
+
+      # ── SBOM ────────────────────────────────────────────────────────────────
+      - name: Generate SBOM (CycloneDX)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.SERVICE_NAME }}:${{ github.ref_name }}
+          format: cyclonedx-json
+          output-file: sbom.json
+
+      # ── Changelog + GitHub Release ──────────────────────────────────────────
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dev dependencies
+        run: uv sync --frozen
+
+      - name: Generate incremental CHANGELOG via commitizen
+        run: uv run cz changelog --incremental ${{ github.ref_name }}
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          bodyFile: CHANGELOG.md
+          artifacts: sbom.json
+          artifactContentType: application/json
+          allowUpdates: true
+          makeLatest: true
+
+      # ── MkDocs versioned docs (mike) ────────────────────────────────────────
+      - name: Configure git for mike (docs deploy)
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Regenerate configuration.md from .env.example
+        run: PYTHONPATH=src uv run python scripts/gen_docs_env.py
+
+      - name: Build and publish versioned docs
+        run: uv run mike deploy --push --update-aliases ${{ env.VERSION }} latest
+
+      # ── Publish OpenAPI schema to Octopus catalog ───────────────────────────
+      - name: Export OpenAPI schema
+        run: |
+          PYTHONPATH=src uv run python -c \
+            "import json; from app.main import app; print(json.dumps(app.openapi()))" \
+            > openapi.json
+        env:
+          DATABASE_URL: "postgresql+asyncpg://placeholder/placeholder"
+          JWT_SECRET_KEY: "schema-export-only"
+
+      - name: POST OpenAPI schema to Octopus catalog
+        run: |
+          curl -s --max-time 10 \
+            -X POST "${{ vars.OCTOPUS_API_URL }}/catalog/${{ env.SERVICE_NAME }}/schema" \
+            -H "Content-Type: application/json" \
+            --data-binary @openapi.json
+        continue-on-error: true
+
+      # ── Notify Octopus deploy ────────────────────────────────────────────────
+      - name: Notify Octopus of new deploy
+        run: |
+          curl -s --max-time 10 \
+            -X POST "${{ vars.OCTOPUS_API_URL }}/projects/${{ env.SERVICE_NAME }}/deploys" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "version":    "${{ env.VERSION }}",
+              "image":      "${{ env.REGISTRY }}/${{ env.SERVICE_NAME }}:${{ github.ref_name }}",
+              "docs_url":   "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ env.VERSION }}/",
+              "sha":        "${{ github.sha }}"
+            }'
+        continue-on-error: true

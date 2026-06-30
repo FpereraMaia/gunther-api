@@ -1,0 +1,22 @@
+meta {
+  name: Update Item
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/items/{{itemId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+
+body:json {
+  {
+    "name": "Updated Item Name",
+    "description": "Updated description"
+  }
+}

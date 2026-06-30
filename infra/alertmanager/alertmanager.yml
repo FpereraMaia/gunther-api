@@ -1,0 +1,25 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: [alertname, service]
+  group_wait: 10s
+  group_interval: 10m
+  repeat_interval: 1h
+  receiver: 'null'
+
+receivers:
+  - name: 'null'
+
+# Uncomment to route alerts to Slack:
+# - name: slack
+#   slack_configs:
+#     - api_url: 'YOUR_SLACK_INCOMING_WEBHOOK_URL'
+#       channel: '#alerts'
+#       title: '[gunther_api] {{ .CommonAnnotations.summary }}'
+#       send_resolved: true
+
+inhibit_rules:
+  - source_matchers: [severity="critical"]
+    target_matchers: [severity="warning"]
+    equal: [alertname, service]

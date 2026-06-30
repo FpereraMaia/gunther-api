@@ -1,0 +1,59 @@
+site_name: "Gunther API"
+site_description: "test"
+repo_name: "gunther_api"
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.instant
+    - navigation.top
+    - content.code.copy
+    - content.code.annotate
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: true
+            show_root_heading: true
+  - mermaid2
+  - mike:
+      version_selector: true
+      canonical_version: latest
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Architecture: architecture.md
+  - Configuration: configuration.md
+  - API: api.md
+  - Runbook: runbook.md
+  - Contributing: contributing.md
+  - ADRs:
+    - "001 — Initial Setup": adrs/001-initial-setup.md
+
+extra:
+  version:
+    provider: mike

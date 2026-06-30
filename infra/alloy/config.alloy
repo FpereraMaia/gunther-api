@@ -1,0 +1,77 @@
+// Grafana Alloy — standalone telemetry pipeline for gunther_api
+//
+// Routes:
+//   Traces  → OTLP gRPC from app → Tempo
+//   Logs    → Docker stdout tailing → Loki  (service_name label auto-extracted from JSON)
+//   Metrics → Prometheus scrapes app /metrics directly (see prometheus.yml)
+//
+// In platform-connected mode, the platform's own Alloy instance handles this.
+
+// ── OTLP receiver — traces from the app ───────────────────────────────────────
+
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+// ── Traces → Tempo ────────────────────────────────────────────────────────────
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+      insecure = true
+    }
+  }
+}
+
+// ── Docker log collection → Loki ──────────────────────────────────────────────
+// Tails stdout from all containers on the host Docker socket.
+// Parses structured JSON logs and extracts service, level, trace_id as labels.
+// Requires: docker socket mounted at /var/run/docker.sock in the Alloy container.
+
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+}
+
+loki.source.docker "default" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.docker.containers.targets
+  forward_to = [loki.process.extract_labels.receiver]
+}
+
+loki.process "extract_labels" {
+  // Parse JSON log lines and promote service/level/trace_id as Loki labels
+  stage.json {
+    expressions = {
+      service  = "service",
+      level    = "level",
+      trace_id = "trace_id",
+    }
+  }
+
+  stage.labels {
+    values = {
+      service  = "service",
+      level    = "level",
+      trace_id = "trace_id",
+    }
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
