@@ -82,9 +82,22 @@ def _make_session_override(
 
 @pytest.fixture
 def test_client(
+    db_engine: Any,
     session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[TestClient]:
-    """Sync TestClient with database dependency overridden to use the test DB."""
+    """Sync TestClient with database dependency overridden to use the test DB.
+
+    `app.main.lifespan` does its own DB connectivity check ("SELECT 1") using
+    the module-level `engine` in `database/session.py`, built from
+    `settings.database_url` — not the per-request `get_db_session` dependency.
+    That engine must be patched to the test DB too, or TestClient startup
+    tries to connect to the real (often unreachable) DATABASE_URL.
+    """
+    import app.infrastructure.database.session as db_session_module
+
+    monkeypatch.setattr(db_session_module, "engine", db_engine)
+    monkeypatch.setattr(db_session_module, "_session_factory", session_factory)
     app.dependency_overrides[get_db_session] = _make_session_override(session_factory)
     with TestClient(app, raise_server_exceptions=True) as client:
         yield client
@@ -93,9 +106,18 @@ def test_client(
 
 @pytest.fixture
 async def async_client(
+    db_engine: Any,
     session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> AsyncIterator[AsyncClient]:
-    """Async client with database dependency overridden to use the test DB."""
+    """Async client with database dependency overridden to use the test DB.
+
+    See `test_client` above — the lifespan's own DB engine must be patched too.
+    """
+    import app.infrastructure.database.session as db_session_module
+
+    monkeypatch.setattr(db_session_module, "engine", db_engine)
+    monkeypatch.setattr(db_session_module, "_session_factory", session_factory)
     app.dependency_overrides[get_db_session] = _make_session_override(session_factory)
     async with AsyncClient(
         transport=ASGITransport(app=app),
