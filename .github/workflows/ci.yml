@@ -82,12 +82,13 @@ jobs:
         env:
           DATABASE_URL: "postgresql+asyncpg://placeholder/placeholder"
           REDIS_URL: "redis://localhost:6379/0"
-          JWT_SECRET_KEY: "ci-test-only-not-for-production"
+          JWT_SECRET_KEY: "ci-test-only-not-for-production"  # pragma: allowlist secret
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         if: always()
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
           fail_ci_if_error: false
 
@@ -100,7 +101,7 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_PASSWORD: postgres  # pragma: allowlist secret
           POSTGRES_DB: schema_test
         ports: ["5432:5432"]
         options: >-
@@ -132,7 +133,8 @@ jobs:
       - name: Run Alembic migrations
         run: PYTHONPATH=src uv run alembic upgrade head
         env:
-          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost/schema_test
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost/schema_test  # pragma: allowlist secret
+          JWT_SECRET_KEY: "ci-test-only-not-for-production"  # pragma: allowlist secret
 
       - name: Start app in background
         run: |
@@ -143,9 +145,9 @@ jobs:
             sleep 1
           done
         env:
-          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost/schema_test
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost/schema_test  # pragma: allowlist secret
           REDIS_URL: redis://localhost:6379/0
-          JWT_SECRET_KEY: "ci-test-only-not-for-production"
+          JWT_SECRET_KEY: "ci-test-only-not-for-production"  # pragma: allowlist secret
 
       - name: Schemathesis — fuzz API against OpenAPI spec
         run: |

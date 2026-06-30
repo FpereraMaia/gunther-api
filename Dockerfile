@@ -24,6 +24,15 @@ RUN uv sync --frozen --no-dev
 # ── Runtime stage ──────────────────────────────────────────────────────────────
 FROM python:3.12-slim AS runtime
 
+# perl-base ships with the base image but nothing here uses Perl. It's a
+# recurring source of CRITICAL CVEs in Debian trixie's package
+# (e.g. CVE-2026-42496, CVE-2026-8376) that trip the Trivy scan even when no
+# fix is available yet — remove it instead of waiting on an upstream patch.
+RUN apt-get update \
+ && apt-get purge -y --allow-remove-essential perl-base \
+ && apt-get autoremove -y \
+ && rm -rf /var/lib/apt/lists/*
+
 # Non-root user — reduce blast radius if the container is compromised
 RUN groupadd --system --gid 1001 app \
  && useradd  --system --uid 1001 --gid app --no-create-home app
