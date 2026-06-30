@@ -32,6 +32,7 @@ from typing import Any
 
 from arq.connections import RedisSettings
 
+from app.application.tasks.example import notify_example
 from app.shared.config import settings
 
 logger = logging.getLogger(__name__)
@@ -62,7 +63,7 @@ class WorkerSettings:
 
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
 
-    functions: list[Callable[..., Any]] = []
+    functions: list[Callable[..., Any]] = [notify_example]
 
     on_startup = startup
     on_shutdown = shutdown
