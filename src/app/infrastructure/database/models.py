@@ -7,4 +7,3 @@ Import this module wherever Base.metadata must know about all tables:
 When adding a new domain, append its model import here:
   from app.infrastructure.database.my_domain.model import MyDomainModel  # noqa: F401
 """
-from app.infrastructure.database.banking.models import BankAccountModel, ImportJobModel, TransactionModel  # noqa: F401

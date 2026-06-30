@@ -11,6 +11,7 @@ Fixtures available to all tests:
   db_session       — async AsyncSession (rolled back after each test)
   redis_url        — Redis testcontainer URL (session-scoped)
 """
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
@@ -21,13 +22,13 @@ from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.infrastructure.database.base import Base
 import app.infrastructure.database.models  # noqa: F401 — ensures all tables are in Base.metadata
+from app.infrastructure.database.base import Base
 from app.infrastructure.database.session import get_db_session
 from app.main import app
 
-
 # ── Postgres testcontainer ─────────────────────────────────────────────────────
+
 
 @pytest.fixture(scope="session")
 def postgres_url() -> Iterator[str]:
@@ -35,9 +36,7 @@ def postgres_url() -> Iterator[str]:
     from testcontainers.postgres import PostgresContainer
 
     with PostgresContainer("postgres:16-alpine") as container:
-        yield container.get_connection_url().replace(
-            "postgresql://", "postgresql+asyncpg://"
-        )
+        yield container.get_connection_url().replace("postgresql://", "postgresql+asyncpg://")
 
 
 @pytest.fixture(scope="session")
@@ -57,18 +56,19 @@ def session_factory(db_engine: Any) -> async_sessionmaker[AsyncSession]:
 
 # ── Per-test DB session (auto-rolled-back) ─────────────────────────────────────
 
+
 @pytest.fixture
 async def db_session(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> AsyncIterator[AsyncSession]:
     """Async session rolled back after every test — zero cleanup needed."""
-    async with session_factory() as session:
-        async with session.begin():
-            yield session
-            await session.rollback()
+    async with session_factory() as session, session.begin():
+        yield session
+        await session.rollback()
 
 
 # ── HTTP test clients ──────────────────────────────────────────────────────────
+
 
 def _make_session_override(
     factory: async_sessionmaker[AsyncSession],
@@ -107,6 +107,7 @@ async def async_client(
 
 # ── Factory and fake-repo fixtures ─────────────────────────────────────────────
 # ── Redis testcontainer ────────────────────────────────────────────────────────
+
 
 @pytest.fixture(scope="session")
 def redis_url() -> Iterator[str]:

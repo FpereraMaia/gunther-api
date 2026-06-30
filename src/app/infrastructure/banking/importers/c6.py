@@ -10,7 +10,7 @@ from decimal import Decimal, InvalidOperation
 import pyzipper
 
 from app.infrastructure.banking.gmail.client import GmailClient
-from app.infrastructure.banking.importers.base import BankImporter, ParsedTransaction, RawSource
+from app.infrastructure.banking.importers.base import ParsedTransaction, RawSource
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +20,8 @@ _SEARCH = f"from:{_SENDER} has:attachment filename:zip"
 
 @dataclass
 class C6Importer:
+    gmail: GmailClient
     bank: str = "c6"
-    gmail: GmailClient = None  # type: ignore[assignment]
     zip_password: str = ""
 
     def fetch_new_sources(self, seen_refs: set[str]) -> list[RawSource]:
@@ -65,13 +65,13 @@ def _billing_date_from_filename(filename: str) -> date:
     # Fatura_2026-06-10.csv  or  Fatura_2026-06-10.zip
     try:
         stem = filename.rsplit(".", 1)[0]  # strip extension
-        date_part = stem.split("_")[-1]   # "2026-06-10"
+        date_part = stem.split("_")[-1]  # "2026-06-10"
         return datetime.strptime(date_part, "%Y-%m-%d").date()
     except Exception:
         return date.today()
 
 
-def _parse_row(row: dict) -> ParsedTransaction | None:
+def _parse_row(row: dict[str, str]) -> ParsedTransaction | None:
     raw_amount = row.get("Valor (em R$)", "").strip().replace(",", ".")
     try:
         amount_brl = Decimal(raw_amount)

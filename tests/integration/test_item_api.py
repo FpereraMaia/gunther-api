@@ -4,11 +4,11 @@ Uses a real PostgreSQL testcontainer (session-scoped) via the test_client fixtur
 Each test creates its own data; items persist for the session but tests are
 independent because they use unique names and IDs.
 """
+
 from __future__ import annotations
 
 import uuid
 
-import pytest
 from fastapi.testclient import TestClient
 
 

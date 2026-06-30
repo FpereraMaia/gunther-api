@@ -3,6 +3,7 @@
 ARQ tasks are plain async functions — testable without Redis or a running worker.
 Pass an empty dict (or a mock) as `ctx`; ARQ only populates it during real execution.
 """
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -27,10 +28,6 @@ async def test_notify_example_restores_correlation_id_after_run() -> None:
 async def test_notify_example_sets_correlation_id_during_execution() -> None:
     captured: list[str] = []
 
-    original_logger_info = __import__("logging").getLogger(
-        "app.application.tasks.example"
-    ).info
-
     def capturing_info(msg: str, *args, **kwargs) -> None:
         captured.append(get_correlation_id())
 
@@ -51,11 +48,13 @@ async def test_notify_example_no_correlation_id_is_fine() -> None:
 
 async def test_notify_example_correlation_id_reset_on_exception() -> None:
     """ContextVar must be cleaned up even if the task body raises."""
-    with patch(
-        "app.application.tasks.example.logger.info",
-        side_effect=[None, RuntimeError("task failed")],
+    with (
+        patch(
+            "app.application.tasks.example.logger.info",
+            side_effect=[None, RuntimeError("task failed")],
+        ),
+        pytest.raises(RuntimeError),
     ):
-        with pytest.raises(RuntimeError):
-            await notify_example({}, resource_id="fail", _correlation_id="cid-fail")
+        await notify_example({}, resource_id="fail", _correlation_id="cid-fail")
 
     assert get_correlation_id() == ""

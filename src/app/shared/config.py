@@ -12,7 +12,8 @@ class Settings(BaseSettings):
 
     # ── App ───────────────────────────────────────────────────────────────────
     app_env: str = "development"
-    app_host: str = "0.0.0.0"
+    # Intentional default for containerized deployment.
+    app_host: str = "0.0.0.0"  # noqa: S104  # nosec B104
     app_port: int = 8000
     log_level: str = "INFO"
     # Comma-separated list of allowed CORS origins.
@@ -54,9 +55,9 @@ class Settings(BaseSettings):
     dev_user_groups: list[str] = []
 
     # ── Banking / Gmail integration ───────────────────────────────────────────
-    gmail_credentials_path: str = ""   # path to credentials.json from Google Cloud
-    gmail_token_path: str = ""         # path to token.json (written after first auth)
-    c6_zip_password: str = ""          # first 6 digits of CPF
+    gmail_credentials_path: str = ""  # path to credentials.json from Google Cloud
+    gmail_token_path: str = ""  # path to token.json (written after first auth)
+    c6_zip_password: str = ""  # first 6 digits of CPF
     c6_gmail_sender: str = "no-reply@c6bank.com.br"
     nubank_gmail_sender: str = "todomundo@nubank.com.br"
 

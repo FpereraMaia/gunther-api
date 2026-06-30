@@ -4,6 +4,7 @@ Standard OAuth2 password flow. The login use case is injected via
 _get_login_use_case(); wire the concrete User repository there once the
 User domain is scaffolded.
 """
+
 from __future__ import annotations
 
 from typing import Annotated
@@ -29,8 +30,7 @@ def _get_login_use_case() -> LoginUseCase:
         return LoginUseCase(user_repo=UserRepository(session))
     """
     raise NotImplementedError(
-        "Wire LoginUseCase to the User repository. "
-        "Run: octopus scaffold domain gunther_api user"
+        "Wire LoginUseCase to the User repository. Run: octopus scaffold domain gunther_api user"
     )
 
 
@@ -45,9 +45,7 @@ async def login(
     use_case: Annotated[LoginUseCase, Depends(_get_login_use_case)],
 ) -> TokenDTO:
     try:
-        return await use_case.execute(
-            LoginDTO(username=form.username, password=form.password)
-        )
+        return await use_case.execute(LoginDTO(username=form.username, password=form.password))
     except AuthenticationError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

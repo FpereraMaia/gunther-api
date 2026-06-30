@@ -4,6 +4,7 @@ The middleware writes here on every incoming request.
 The structlog processor in logging.py reads from here to inject
 correlation_id into every log line emitted during request handling.
 """
+
 from __future__ import annotations
 
 import uuid

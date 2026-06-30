@@ -4,7 +4,7 @@ import hashlib
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
-from typing import Protocol
+from typing import Any, Protocol
 
 
 @dataclass
@@ -24,7 +24,7 @@ class ParsedTransaction:
     exchange_rate: Decimal | None = None
     installment_current: int | None = None
     installment_total: int | None = None
-    raw: dict = field(default_factory=dict)
+    raw: dict[str, Any] = field(default_factory=dict)
 
 
 def make_row_hash(bank: str, billing_date: date, tx: ParsedTransaction) -> str:

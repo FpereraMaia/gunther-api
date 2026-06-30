@@ -3,6 +3,7 @@
 Silent no-op when SENTRY_DSN is empty — no import errors, no warnings.
 Automatically correlates with OTel trace IDs when both are configured.
 """
+
 from __future__ import annotations
 
 from app.shared.config import Settings
@@ -14,8 +15,8 @@ def setup_sentry(settings: Settings) -> None:
 
     import sentry_sdk
     from sentry_sdk.integrations.fastapi import FastApiIntegration
-    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
     from sentry_sdk.integrations.logging import LoggingIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
     sentry_sdk.init(
         dsn=settings.sentry_dsn,

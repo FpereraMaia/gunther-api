@@ -9,6 +9,7 @@ On every inbound request:
 Clients can pass their own ID to trace a flow across multiple services.
 If absent, a new one is generated per request.
 """
+
 from __future__ import annotations
 
 from opentelemetry import baggage, context

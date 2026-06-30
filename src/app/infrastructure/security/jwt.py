@@ -7,10 +7,11 @@ The get_current_user dependency is used in any route that requires authenticatio
     async def me(user: Annotated[TokenPayload, Depends(get_current_user)]) -> ...:
         ...  # user.sub is the authenticated entity's ID
 """
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import Depends
@@ -29,7 +30,7 @@ def create_access_token(
     extra_claims: dict[str, Any] | None = None,
 ) -> str:
     """Sign and return a JWT access token for the given subject."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expire = now + timedelta(minutes=settings.jwt_expire_minutes)
     payload: dict[str, Any] = {
         "sub": subject,
@@ -38,7 +39,7 @@ def create_access_token(
         "jti": str(uuid.uuid4()),
         **(extra_claims or {}),
     }
-    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return str(jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm))
 
 
 def decode_token(token: str) -> TokenPayload:
@@ -51,7 +52,7 @@ def decode_token(token: str) -> TokenPayload:
         )
         return TokenPayload(
             sub=raw["sub"],
-            exp=datetime.fromtimestamp(raw["exp"], tz=timezone.utc),
+            exp=datetime.fromtimestamp(raw["exp"], tz=UTC),
             jti=raw.get("jti", ""),
         )
     except (JWTError, KeyError) as exc:

@@ -3,13 +3,18 @@ from __future__ import annotations
 import uuid
 from datetime import date
 from decimal import Decimal
+from typing import Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import CursorResult, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.banking.entities import BankAccount, ImportJob, Transaction
-from app.infrastructure.database.banking.models import BankAccountModel, ImportJobModel, TransactionModel
+from app.infrastructure.database.banking.models import (
+    BankAccountModel,
+    ImportJobModel,
+    TransactionModel,
+)
 
 
 class BankingRepository:
@@ -18,7 +23,9 @@ class BankingRepository:
 
     # ── BankAccount ───────────────────────────────────────────────────────────
 
-    async def get_or_create_account(self, bank: str, card_last4: str, owner_name: str) -> BankAccount:
+    async def get_or_create_account(
+        self, bank: str, card_last4: str, owner_name: str
+    ) -> BankAccount:
         result = await self._s.execute(
             select(BankAccountModel).where(
                 BankAccountModel.bank == bank,
@@ -34,15 +41,19 @@ class BankingRepository:
         return self._account_to_entity(model)
 
     async def list_accounts(self) -> list[BankAccount]:
-        rows = (await self._s.execute(select(BankAccountModel).order_by(BankAccountModel.bank))).scalars()
+        rows = (
+            await self._s.execute(select(BankAccountModel).order_by(BankAccountModel.bank))
+        ).scalars()
         return [self._account_to_entity(m) for m in rows]
 
     # ── ImportJob ─────────────────────────────────────────────────────────────
 
     async def source_ref_exists(self, source_ref: str) -> bool:
-        row = (await self._s.execute(
-            select(ImportJobModel.id).where(ImportJobModel.source_ref == source_ref)
-        )).scalar_one_or_none()
+        row = (
+            await self._s.execute(
+                select(ImportJobModel.id).where(ImportJobModel.source_ref == source_ref)
+            )
+        ).scalar_one_or_none()
         return row is not None
 
     async def create_import_job(
@@ -76,12 +87,16 @@ class BankingRepository:
 
     # ── Transaction ───────────────────────────────────────────────────────────
 
-    async def bulk_insert_transactions(self, rows: list[dict]) -> int:
+    async def bulk_insert_transactions(self, rows: list[dict[str, Any]]) -> int:
         """Insert rows, skipping duplicates by row_hash. Returns inserted count."""
         if not rows:
             return 0
-        stmt = insert(TransactionModel).values(rows).on_conflict_do_nothing(index_elements=["row_hash"])
-        result = await self._s.execute(stmt)
+        stmt = (
+            insert(TransactionModel)
+            .values(rows)
+            .on_conflict_do_nothing(index_elements=["row_hash"])
+        )
+        result = cast(CursorResult[Any], await self._s.execute(stmt))
         return result.rowcount
 
     async def list_transactions(
@@ -108,13 +123,15 @@ class BankingRepository:
         if category:
             q = q.where(TransactionModel.category == category)
 
-        total = (await self._s.execute(
-            select(sqlfunc.count()).select_from(q.subquery())
-        )).scalar_one()
+        total = (
+            await self._s.execute(select(sqlfunc.count()).select_from(q.subquery()))
+        ).scalar_one()
 
-        rows = (await self._s.execute(
-            q.order_by(TransactionModel.date.desc()).offset(offset).limit(limit)
-        )).scalars()
+        rows = (
+            await self._s.execute(
+                q.order_by(TransactionModel.date.desc()).offset(offset).limit(limit)
+            )
+        ).scalars()
         return [self._tx_to_entity(m) for m in rows], total
 
     async def get_summary(
@@ -122,7 +139,7 @@ class BankingRepository:
         from_date: date | None = None,
         to_date: date | None = None,
         bank: str | None = None,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         from sqlalchemy import func as sqlfunc
 
         q = (
@@ -130,7 +147,7 @@ class BankingRepository:
                 BankAccountModel.bank,
                 TransactionModel.category,
                 sqlfunc.sum(TransactionModel.amount_brl).label("total"),
-                sqlfunc.count(TransactionModel.id).label("count"),
+                sqlfunc.count(TransactionModel.id).label("tx_count"),
             )
             .join(BankAccountModel)
             .where(TransactionModel.amount_brl > 0)
@@ -145,37 +162,56 @@ class BankingRepository:
             q = q.where(TransactionModel.date <= to_date)
 
         rows = (await self._s.execute(q)).all()
-        return [{"bank": r.bank, "category": r.category, "total": float(r.total), "count": r.count} for r in rows]
+        return [
+            {"bank": r.bank, "category": r.category, "total": float(r.total), "count": r.tx_count}
+            for r in rows
+        ]
 
     # ── Converters ────────────────────────────────────────────────────────────
 
     @staticmethod
     def _account_to_entity(m: BankAccountModel) -> BankAccount:
         return BankAccount(
-            id=m.id, bank=m.bank, account_type=m.account_type,
-            card_last4=m.card_last4, owner_name=m.owner_name,
-            created_at=m.created_at, updated_at=m.updated_at,
+            id=m.id,
+            bank=m.bank,
+            account_type=m.account_type,
+            card_last4=m.card_last4,
+            owner_name=m.owner_name,
+            created_at=m.created_at,
+            updated_at=m.updated_at,
         )
 
     @staticmethod
     def _job_to_entity(m: ImportJobModel) -> ImportJob:
         return ImportJob(
-            id=m.id, bank_account_id=m.bank_account_id,
-            source_type=m.source_type, source_ref=m.source_ref,
-            billing_date=m.billing_date, row_count=m.row_count,
-            status=m.status, imported_at=m.imported_at,
-            created_at=m.created_at, updated_at=m.updated_at,
+            id=m.id,
+            bank_account_id=m.bank_account_id,
+            source_type=m.source_type,
+            source_ref=m.source_ref,
+            billing_date=m.billing_date,
+            row_count=m.row_count,
+            status=m.status,
+            imported_at=m.imported_at,
+            created_at=m.created_at,
+            updated_at=m.updated_at,
         )
 
     @staticmethod
     def _tx_to_entity(m: TransactionModel) -> Transaction:
         return Transaction(
-            id=m.id, import_job_id=m.import_job_id, bank_account_id=m.bank_account_id,
-            date=m.date, description=m.description, category=m.category,
+            id=m.id,
+            import_job_id=m.import_job_id,
+            bank_account_id=m.bank_account_id,
+            date=m.date,
+            description=m.description,
+            category=m.category,
             amount_brl=Decimal(str(m.amount_brl)),
             amount_usd=Decimal(str(m.amount_usd)) if m.amount_usd else None,
             exchange_rate=Decimal(str(m.exchange_rate)) if m.exchange_rate else None,
-            installment_current=m.installment_current, installment_total=m.installment_total,
-            row_hash=m.row_hash, raw=m.raw,
-            created_at=m.created_at, updated_at=m.updated_at,
+            installment_current=m.installment_current,
+            installment_total=m.installment_total,
+            row_hash=m.row_hash,
+            raw=m.raw,
+            created_at=m.created_at,
+            updated_at=m.updated_at,
         )

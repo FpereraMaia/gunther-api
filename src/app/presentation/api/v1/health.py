@@ -4,6 +4,7 @@ live  — liveness: the process is up (always 200 if the endpoint responds)
 ready — readiness: all dependencies are reachable (DB, Redis)
          Used by the platform load balancer and Docker HEALTHCHECK.
 """
+
 from __future__ import annotations
 
 from typing import Annotated
@@ -14,8 +15,8 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.infrastructure.database.session import get_db_session
 from app.infrastructure.cache.redis import get_redis
+from app.infrastructure.database.session import get_db_session
 
 router = APIRouter(prefix="/health", tags=["health"])
 

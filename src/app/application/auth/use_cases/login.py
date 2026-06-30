@@ -10,6 +10,7 @@ Then wire it:
     # infrastructure/database/user/repository.py — implements IUserAuthRepository
     # presentation/dependencies.py — return LoginUseCase(user_repo=UserRepository(session))
 """
+
 from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import base64
 import logging
+from collections.abc import Generator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Generator
+from typing import Any
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -21,7 +22,7 @@ class GmailClient:
     credentials_path: str
     token_path: str
 
-    def _service(self):
+    def _service(self) -> Any:
         creds = self._load_credentials()
         return build("gmail", "v1", credentials=creds, cache_discovery=False)
 
@@ -73,20 +74,26 @@ class GmailClient:
                 body = part.get("body", {})
                 attachment_id = body.get("attachmentId")
                 if attachment_id:
-                    att = service.users().messages().attachments().get(
-                        userId="me", messageId=msg_id, id=attachment_id
-                    ).execute()
+                    att = (
+                        service.users()
+                        .messages()
+                        .attachments()
+                        .get(userId="me", messageId=msg_id, id=attachment_id)
+                        .execute()
+                    )
                     data = base64.urlsafe_b64decode(att["data"])
                 elif body.get("data"):
                     data = base64.urlsafe_b64decode(body["data"])
                 else:
                     continue
 
-                logger.info("gmail.attachment_found", extra={"msg_id": msg_id, "attachment": filename})
+                logger.info(
+                    "gmail.attachment_found", extra={"msg_id": msg_id, "attachment": filename}
+                )
                 yield msg_id, filename, data
 
 
-def _iter_parts(payload: dict):
+def _iter_parts(payload: dict[str, Any]) -> Generator[dict[str, Any], None, None]:
     yield payload
     for part in payload.get("parts", []):
         yield from _iter_parts(part)

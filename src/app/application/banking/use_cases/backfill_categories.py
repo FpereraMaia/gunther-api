@@ -9,12 +9,14 @@ from app.infrastructure.database.banking.models import BankAccountModel, Transac
 
 async def backfill_nubank_categories(session: AsyncSession) -> int:
     """Set category on Nubank transactions that currently have none. Returns updated count."""
-    rows = (await session.execute(
-        select(TransactionModel.id, TransactionModel.description)
-        .join(BankAccountModel)
-        .where(BankAccountModel.bank == "nubank")
-        .where(TransactionModel.category.is_(None))
-    )).all()
+    rows = (
+        await session.execute(
+            select(TransactionModel.id, TransactionModel.description)
+            .join(BankAccountModel)
+            .where(BankAccountModel.bank == "nubank")
+            .where(TransactionModel.category.is_(None))
+        )
+    ).all()
 
     updated = 0
     for row in rows:

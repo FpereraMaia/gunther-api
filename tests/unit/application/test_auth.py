@@ -2,10 +2,10 @@
 
 These tests run without any database or HTTP stack.
 """
+
 from __future__ import annotations
 
-import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -16,7 +16,6 @@ from app.infrastructure.security.jwt import create_access_token, decode_token
 from app.infrastructure.security.passwords import hash_password, verify_password
 from app.shared.exceptions import AuthenticationError
 
-
 # ── JWT ───────────────────────────────────────────────────────────────────────
 
 
@@ -24,7 +23,7 @@ def test_create_and_decode_token() -> None:
     token = create_access_token(subject="user-123")
     payload = decode_token(token)
     assert payload.sub == "user-123"
-    assert payload.exp > datetime.now(timezone.utc)
+    assert payload.exp > datetime.now(UTC)
     assert payload.jti != ""
 
 
@@ -49,7 +48,9 @@ def test_token_has_unique_jti() -> None:
 def test_extra_claims_included() -> None:
     token = create_access_token("u1", extra_claims={"role": "admin"})
     from jose import jwt as _jwt
+
     from app.shared.config import settings
+
     raw = _jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
     assert raw["role"] == "admin"
 
@@ -98,7 +99,9 @@ def mock_repo(mock_user: MagicMock) -> AsyncMock:
 
 async def test_login_success(mock_repo: AsyncMock, mock_user: MagicMock) -> None:
     use_case = LoginUseCase(user_repo=mock_repo)
-    result = await use_case.execute(LoginDTO(username="alice", password="correct_password"))
+    result = await use_case.execute(
+        LoginDTO(username="alice", password="correct_password")  # pragma: allowlist secret
+    )
     assert isinstance(result, TokenDTO)
     assert result.token_type == "bearer"
     payload = decode_token(result.access_token)
@@ -109,10 +112,14 @@ async def test_login_user_not_found_raises(mock_repo: AsyncMock) -> None:
     mock_repo.find_by_username.return_value = None
     use_case = LoginUseCase(user_repo=mock_repo)
     with pytest.raises(AuthenticationError):
-        await use_case.execute(LoginDTO(username="ghost", password="any"))
+        await use_case.execute(
+            LoginDTO(username="ghost", password="any")  # pragma: allowlist secret
+        )
 
 
 async def test_login_wrong_password_raises(mock_repo: AsyncMock) -> None:
     use_case = LoginUseCase(user_repo=mock_repo)
     with pytest.raises(AuthenticationError):
-        await use_case.execute(LoginDTO(username="alice", password="wrong_password"))
+        await use_case.execute(
+            LoginDTO(username="alice", password="wrong_password")  # pragma: allowlist secret
+        )

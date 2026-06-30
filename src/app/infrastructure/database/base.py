@@ -3,6 +3,7 @@
 All ORM models inherit from Base. Domain entities are pure Python dataclasses
 with no SQLAlchemy dependency — see domain/<entity>/entities.py for those.
 """
+
 from __future__ import annotations
 
 import uuid

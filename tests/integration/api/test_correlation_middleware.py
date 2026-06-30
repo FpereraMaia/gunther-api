@@ -1,4 +1,5 @@
 """Integration tests for the CorrelationIDMiddleware."""
+
 from __future__ import annotations
 
 import re
@@ -6,9 +7,7 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-UUID4_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-)
+UUID4_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 
 
 def test_generates_correlation_id_when_absent(test_client: TestClient) -> None:

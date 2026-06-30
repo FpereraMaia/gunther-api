@@ -1,4 +1,5 @@
 """bcrypt password hashing — direct bcrypt library, no passlib wrapper."""
+
 from __future__ import annotations
 
 import bcrypt

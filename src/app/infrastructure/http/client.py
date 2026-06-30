@@ -23,6 +23,7 @@ Usage:
     ) -> dict:
         return await client.get_json("/api/v1/resource")
 """
+
 from __future__ import annotations
 
 import logging
@@ -38,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = httpx.Timeout(timeout=10.0, connect=5.0)
 DEFAULT_RETRY_ATTEMPTS = 3
-DEFAULT_RETRY_MIN_WAIT = 0.5   # seconds
+DEFAULT_RETRY_MIN_WAIT = 0.5  # seconds
 DEFAULT_RETRY_MAX_WAIT = 10.0  # seconds
 
 

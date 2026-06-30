@@ -1,4 +1,5 @@
 """Unit tests for the correlation ID ContextVar store."""
+
 from __future__ import annotations
 
 import uuid

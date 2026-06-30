@@ -6,6 +6,7 @@ Patterns:
   unit_of_work()   — context manager for use cases that need a committed
                      transaction; commits on success, rolls back on exception.
 """
+
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
@@ -51,6 +52,5 @@ async def unit_of_work() -> AsyncGenerator[AsyncSession, None]:
             await repo.save(entity, session=session)
         # committed here, or rolled back if an exception was raised
     """
-    async with _session_factory() as session:
-        async with session.begin():
-            yield session
+    async with _session_factory() as session, session.begin():
+        yield session

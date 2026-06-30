@@ -9,12 +9,13 @@ Placement in the middleware stack (Starlette reverse-registration order):
   SecurityHeaders adds response headers — ensuring the log captures the
   real application status, not a modified version.
 """
+
 from __future__ import annotations
 
 import logging
 import time
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -26,7 +27,7 @@ _SKIP_PATHS = frozenset({"/metrics", "/health", "/health/live", "/health/ready",
 
 
 class AccessLogMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if request.url.path in _SKIP_PATHS:
             return await call_next(request)
 

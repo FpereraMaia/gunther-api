@@ -23,9 +23,11 @@ How to enqueue a job from the web app or another task:
 The _correlation_id convention: pass it as a kwarg to every enqueue_job() call so
 that background task logs appear in the same Loki stream as the triggering request.
 """
+
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from arq.connections import RedisSettings
@@ -37,8 +39,8 @@ logger = logging.getLogger(__name__)
 
 async def startup(ctx: dict[str, Any]) -> None:
     """Called once when the worker process starts."""
-    from app.infrastructure.telemetry.otel import setup_telemetry
     from app.infrastructure.telemetry.logging import setup_logging
+    from app.infrastructure.telemetry.otel import setup_telemetry
     from app.infrastructure.telemetry.sentry import setup_sentry
 
     setup_telemetry(settings)
@@ -60,12 +62,12 @@ class WorkerSettings:
 
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
 
-    functions: list = []
+    functions: list[Callable[..., Any]] = []
 
     on_startup = startup
     on_shutdown = shutdown
 
     queue_name = "gunther_api:default"
     max_jobs = 10
-    job_timeout = 300   # seconds — raise for long-running tasks
+    job_timeout = 300  # seconds — raise for long-running tasks
     keep_result = 3600  # seconds to retain finished-job state in Redis

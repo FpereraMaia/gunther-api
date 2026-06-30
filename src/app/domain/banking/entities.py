@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 
 @dataclass
@@ -45,6 +46,6 @@ class Transaction:
     installment_current: int | None
     installment_total: int | None
     row_hash: str
-    raw: dict
+    raw: dict[str, Any]
     created_at: datetime
     updated_at: datetime

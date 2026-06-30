@@ -13,9 +13,10 @@ Adds defensive HTTP headers to every response:
 These headers are harmless in development and critical in production.
 The Swagger UI (/docs, /redoc) is excluded from CSP so it keeps working locally.
 """
+
 from __future__ import annotations
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -41,7 +42,7 @@ _DOCS_PATHS = frozenset({"/docs", "/redoc", "/openapi.json"})
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         response = await call_next(request)
 
         for name, value in _ALWAYS_HEADERS.items():

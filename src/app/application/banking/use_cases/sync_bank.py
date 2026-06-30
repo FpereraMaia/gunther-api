@@ -22,7 +22,9 @@ class SyncResult:
     errors: list[str] = field(default_factory=list)
 
 
-async def sync_bank(importer: BankImporter, session: AsyncSession, owner_name: str = "") -> SyncResult:
+async def sync_bank(
+    importer: BankImporter, session: AsyncSession, owner_name: str = ""
+) -> SyncResult:
     repo = BankingRepository(session)
     result = SyncResult(bank=importer.bank)
 

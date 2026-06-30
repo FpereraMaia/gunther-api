@@ -33,6 +33,7 @@ Redis backend:
   Uses the same Redis URL as the rest of the application.
   Counters expire automatically — no manual cleanup needed.
 """
+
 from __future__ import annotations
 
 from fastapi import FastAPI
@@ -58,4 +59,9 @@ def setup_rate_limiting(app: FastAPI) -> None:
         setup_rate_limiting(app)
     """
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    # slowapi's handler is typed to the narrower RateLimitExceeded, but Starlette's
+    # add_exception_handler expects Callable[[Request, Exception], Response].
+    app.add_exception_handler(
+        RateLimitExceeded,
+        _rate_limit_exceeded_handler,  # type: ignore[arg-type]
+    )

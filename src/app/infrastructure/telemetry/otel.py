@@ -9,7 +9,10 @@ Pipeline:
 Call setup_telemetry() once at application startup, before any other imports,
 so instrumentation patches are applied at the earliest possible point.
 """
+
 from __future__ import annotations
+
+from typing import Any
 
 from opentelemetry import metrics, trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
@@ -56,8 +59,8 @@ def _setup_metrics(resource: Resource) -> None:
 
 def _instrument_libraries() -> None:
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-    from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
     from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+    from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 
     FastAPIInstrumentor().instrument()
     SQLAlchemyInstrumentor().instrument()
@@ -67,7 +70,7 @@ def _instrument_libraries() -> None:
     RedisInstrumentor().instrument()
 
 
-def make_metrics_asgi_app():  # type: ignore[return]
+def make_metrics_asgi_app() -> Any:
     """Return an ASGI app that serves Prometheus-format metrics at /metrics."""
     from prometheus_client import make_asgi_app
 

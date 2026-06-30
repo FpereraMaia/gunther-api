@@ -4,11 +4,12 @@ Composition root — the only place where all layers are wired together.
 Import order matters: telemetry must be initialised before other imports
 so instrumentation patches are applied at startup.
 """
+
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,17 +42,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
       3. Database connection pool
     """
     # ── Phase 3: telemetry ────────────────────────────────────────────────────
-    from app.infrastructure.telemetry.otel import setup_telemetry
     from app.infrastructure.telemetry.logging import setup_logging
+    from app.infrastructure.telemetry.otel import setup_telemetry
     from app.infrastructure.telemetry.sentry import setup_sentry
 
-    setup_telemetry(settings)   # must be first — patches instrumentation hooks
+    setup_telemetry(settings)  # must be first — patches instrumentation hooks
     setup_logging(settings)
     setup_sentry(settings)
 
     # ── Phase 5: database ─────────────────────────────────────────────────────
-    from app.infrastructure.database.session import engine
     from sqlalchemy import text
+
+    from app.infrastructure.database.session import engine
 
     async with engine.begin() as conn:
         await conn.execute(text("SELECT 1"))  # fail fast if DB is unreachable
@@ -63,6 +65,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # ── Teardown — drain connections before exit ───────────────────────────────
     await engine.dispose()
     from app.infrastructure.cache.redis import close_redis
+
     await close_redis()
     logger.info("service.shutdown", extra={"service": settings.otel_service_name})
 
@@ -95,18 +98,19 @@ def _register_middleware(app: FastAPI) -> None:
     from app.presentation.middleware.logging import AccessLogMiddleware
     from app.presentation.middleware.security import SecurityHeadersMiddleware
 
-    app.add_middleware(                    # registered 1st → runs last (closest to handler)
+    app.add_middleware(  # registered 1st → runs last (closest to handler)
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.add_middleware(SecurityHeadersMiddleware)   # registered 2nd
-    app.add_middleware(AccessLogMiddleware)         # registered 3rd
+    app.add_middleware(SecurityHeadersMiddleware)  # registered 2nd
+    app.add_middleware(AccessLogMiddleware)  # registered 3rd
     from app.presentation.middleware.rate_limit import setup_rate_limiting
+
     setup_rate_limiting(app)
-    app.add_middleware(CorrelationIDMiddleware)     # registered last → runs first
+    app.add_middleware(CorrelationIDMiddleware)  # registered last → runs first
 
 
 def _register_routers(app: FastAPI) -> None:
@@ -157,9 +161,7 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(AuthenticationError)
     async def _unauthenticated(request: Request, exc: AuthenticationError) -> JSONResponse:
-        return _problem(
-            "unauthenticated", "Unauthorized", status.HTTP_401_UNAUTHORIZED, str(exc)
-        )
+        return _problem("unauthenticated", "Unauthorized", status.HTTP_401_UNAUTHORIZED, str(exc))
 
     @app.exception_handler(AuthorizationError)
     async def _forbidden(request: Request, exc: AuthorizationError) -> JSONResponse:
@@ -168,13 +170,19 @@ def _register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ValidationError)
     async def _validation(request: Request, exc: ValidationError) -> JSONResponse:
         return _problem(
-            "validation-error", "Unprocessable Entity", status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)
+            "validation-error",
+            "Unprocessable Entity",
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            str(exc),
         )
 
     @app.exception_handler(DomainError)
     async def _domain(request: Request, exc: DomainError) -> JSONResponse:
         return _problem(
-            "domain-error", "Business Rule Violation", status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)
+            "domain-error",
+            "Business Rule Violation",
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            str(exc),
         )
 
     @app.exception_handler(ApplicationError)

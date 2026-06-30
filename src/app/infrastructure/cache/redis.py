@@ -3,6 +3,7 @@
 A single shared Redis connection is created on first use and reused across
 requests. Call close() during application shutdown to drain the connection pool.
 """
+
 from __future__ import annotations
 
 from redis.asyncio import Redis

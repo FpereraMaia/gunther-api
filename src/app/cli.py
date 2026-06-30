@@ -1,4 +1,5 @@
 """CLI entry point. Run with: python -m app.cli <command>"""
+
 from __future__ import annotations
 
 import sys

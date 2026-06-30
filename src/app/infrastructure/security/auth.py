@@ -7,9 +7,11 @@ This module reads those headers and exposes them as FastAPI dependencies.
 In development (devcontainer / local uvicorn), set DEV_USER_UID in .env to
 bypass header requirement without touching production code paths.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from fastapi import Depends, HTTPException, Request, status
 
@@ -51,8 +53,9 @@ def get_user(request: Request) -> UserContext:
     )
 
 
-def require_group(group: str) -> Depends:
+def require_group(group: str) -> Any:
     """Dependency factory — raise 403 if the authenticated user lacks the group."""
+
     def _check(user: UserContext = Depends(get_user)) -> UserContext:
         if group not in user.groups:
             raise HTTPException(
@@ -60,4 +63,5 @@ def require_group(group: str) -> Depends:
                 detail=f"Group '{group}' required",
             )
         return user
+
     return Depends(_check)

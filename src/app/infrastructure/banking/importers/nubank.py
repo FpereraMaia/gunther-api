@@ -9,7 +9,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from app.infrastructure.banking.gmail.client import GmailClient
-from app.infrastructure.banking.importers.base import BankImporter, ParsedTransaction, RawSource
+from app.infrastructure.banking.importers.base import ParsedTransaction, RawSource
 from app.infrastructure.banking.importers.categorizer import infer_category
 
 logger = logging.getLogger(__name__)
@@ -21,8 +21,8 @@ _PARCELA_RE = re.compile(r"^(.+?)\s*-\s*Parcela\s+(\d+)/(\d+)\s*$", re.IGNORECAS
 
 @dataclass
 class NubankImporter:
+    gmail: GmailClient
     bank: str = "nubank"
-    gmail: GmailClient = None  # type: ignore[assignment]
 
     def fetch_new_sources(self, seen_refs: set[str]) -> list[RawSource]:
         sources: list[RawSource] = []
@@ -73,7 +73,7 @@ def _parse_brl(value: str) -> Decimal | None:
         return None
 
 
-def _parse_row(row: dict) -> ParsedTransaction | None:
+def _parse_row(row: dict[str, str]) -> ParsedTransaction | None:
     raw_date = row.get("date", "").strip()
     try:
         tx_date = datetime.strptime(raw_date, "%Y-%m-%d").date()

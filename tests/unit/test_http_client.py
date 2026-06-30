@@ -1,13 +1,14 @@
 """Unit tests for ServiceClient — uses httpx.MockTransport (no extra deps)."""
+
 from __future__ import annotations
 
-import pytest
 import httpx
+import pytest
 
 from app.infrastructure.http.client import (
     ServiceClient,
-    _ServerError,
     _inject_correlation_header,
+    _ServerError,
 )
 from app.shared.correlation import reset, set_id
 

@@ -8,6 +8,7 @@ Every log line includes:
 Logs go to stdout as JSON. In Docker, Alloy's docker log collector tails stdout
 and forwards to Loki with service_name as a label.
 """
+
 from __future__ import annotations
 
 import logging
@@ -19,9 +20,7 @@ import structlog
 from app.shared.config import Settings
 
 
-def _add_service_context(
-    logger: Any, method: str, event_dict: dict[str, Any]
-) -> dict[str, Any]:
+def _add_service_context(logger: Any, method: str, event_dict: dict[str, Any]) -> dict[str, Any]:
     from app.shared.config import settings as _settings
 
     event_dict["service"] = _settings.otel_service_name
@@ -29,9 +28,7 @@ def _add_service_context(
     return event_dict
 
 
-def _add_otel_context(
-    logger: Any, method: str, event_dict: dict[str, Any]
-) -> dict[str, Any]:
+def _add_otel_context(logger: Any, method: str, event_dict: dict[str, Any]) -> dict[str, Any]:
     """Inject trace_id and span_id from the active OTel span into every log line."""
     from opentelemetry import trace
 
@@ -43,9 +40,7 @@ def _add_otel_context(
     return event_dict
 
 
-def _add_correlation_id(
-    logger: Any, method: str, event_dict: dict[str, Any]
-) -> dict[str, Any]:
+def _add_correlation_id(logger: Any, method: str, event_dict: dict[str, Any]) -> dict[str, Any]:
     """Inject correlation_id from the ContextVar set by CorrelationIDMiddleware."""
     from app.shared.correlation import get
 
