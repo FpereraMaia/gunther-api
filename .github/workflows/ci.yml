@@ -140,6 +140,7 @@ jobs:
         run: |
           PYTHONPATH=src uv run uvicorn app.main:app \
             --host 0.0.0.0 --port 8000 &
+          echo $! > /tmp/uvicorn.pid
           for i in $(seq 1 30); do
             curl -s http://localhost:8000/health > /dev/null && echo "App ready" && break
             sleep 1
@@ -160,6 +161,10 @@ jobs:
             --max-examples=50 \
             --seed=42 \
             --exclude-path /api/v1/auth/token
+
+      - name: Stop background app
+        if: always()
+        run: kill "$(cat /tmp/uvicorn.pid)" 2>/dev/null || true
 
   # ── Docker build & scan ────────────────────────────────────────────────────────
   build:
