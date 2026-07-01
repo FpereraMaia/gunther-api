@@ -27,6 +27,7 @@ class FakeImporter:
     """In-memory stand-in for a `BankImporter` (C6/Nubank)."""
 
     bank: str = "fake"
+    account_type: str = "credit_card"
     sources: list[RawSource] = field(default_factory=list)
     parsed: dict[str, tuple[str, list[ParsedTransaction]]] = field(default_factory=dict)
     raise_on: set[str] = field(default_factory=set)
@@ -140,7 +141,9 @@ async def test_happy_path_imports_source_and_inserts_transactions(
     assert result.sources_imported == 1
     assert result.transactions_inserted == 2
     assert result.errors == []
-    mock_repo.get_or_create_account.assert_awaited_once_with("nubank", "", "Felipe")
+    mock_repo.get_or_create_account.assert_awaited_once_with(
+        "nubank", "", "Felipe", account_type="credit_card"
+    )
     session.commit.assert_awaited_once()
 
 

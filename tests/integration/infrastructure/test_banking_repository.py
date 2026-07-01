@@ -325,3 +325,167 @@ async def test_get_summary_groups_by_bank_and_category(db_session: AsyncSession)
     assert len(summary) == 1
     assert summary[0]["total"] == 25.00
     assert summary[0]["count"] == 2
+
+
+# ── account_type filtering ──────────────────────────────────────────────────
+
+
+async def test_list_transactions_filters_by_account_type(db_session: AsyncSession) -> None:
+    repo = BankingRepository(db_session)
+    checking = await repo.get_or_create_account(
+        "nubank", "70254102", "Felipe", account_type="checking"
+    )
+    credit = await repo.get_or_create_account("nubank", "", "Felipe", account_type="credit_card")
+    checking_job = await repo.create_import_job(
+        bank_account_id=checking.id,
+        source_type="gmail",
+        source_ref="msg-checking",
+        billing_date=date(2026, 6, 1),
+        row_count=1,
+    )
+    credit_job = await repo.create_import_job(
+        bank_account_id=credit.id,
+        source_type="gmail",
+        source_ref="msg-credit",
+        billing_date=date(2026, 6, 1),
+        row_count=1,
+    )
+    await repo.bulk_insert_transactions(
+        [
+            _tx_row(checking.id, checking_job.id, description="Pix", row_hash="acct-type-1"),
+            _tx_row(credit.id, credit_job.id, description="Uber", row_hash="acct-type-2"),
+        ]
+    )
+
+    checking_only, total = await repo.list_transactions(account_type="checking")
+
+    assert total == 1
+    assert checking_only[0].description == "Pix"
+
+
+# ── get_monthly_cash_flow ────────────────────────────────────────────────────
+
+
+async def test_get_monthly_cash_flow_splits_income_and_expense_by_month(
+    db_session: AsyncSession,
+) -> None:
+    repo = BankingRepository(db_session)
+    account = await repo.get_or_create_account("nubank", "1234", "Felipe")
+    job = await repo.create_import_job(
+        bank_account_id=account.id,
+        source_type="gmail",
+        source_ref="msg-1",
+        billing_date=date(2026, 6, 1),
+        row_count=3,
+    )
+    await repo.bulk_insert_transactions(
+        [
+            _tx_row(
+                account.id, job.id, tx_date=date(2026, 6, 5), amount_brl=50.00, row_hash="cf-1"
+            ),
+            _tx_row(
+                account.id, job.id, tx_date=date(2026, 6, 10), amount_brl=-200.00, row_hash="cf-2"
+            ),
+            _tx_row(
+                account.id, job.id, tx_date=date(2026, 7, 1), amount_brl=30.00, row_hash="cf-3"
+            ),
+        ]
+    )
+
+    flow = await repo.get_monthly_cash_flow(bank="nubank")
+
+    assert len(flow) == 2
+    june = next(f for f in flow if f["month"] == date(2026, 6, 1))
+    july = next(f for f in flow if f["month"] == date(2026, 7, 1))
+    assert june["expense"] == 50.00
+    assert june["income"] == 200.00
+    assert june["net"] == 150.00
+    assert july["expense"] == 30.00
+    assert july["income"] == 0.0
+
+
+# ── get_spend_vs_transfers ───────────────────────────────────────────────────
+
+
+async def test_get_spend_vs_transfers_separates_transfer_categories(
+    db_session: AsyncSession,
+) -> None:
+    repo = BankingRepository(db_session)
+    account = await repo.get_or_create_account("nubank", "70254102", "Felipe")
+    job = await repo.create_import_job(
+        bank_account_id=account.id,
+        source_type="gmail",
+        source_ref="msg-1",
+        billing_date=date(2026, 6, 1),
+        row_count=3,
+    )
+    await repo.bulk_insert_transactions(
+        [
+            _tx_row(
+                account.id,
+                job.id,
+                description="Restaurante",
+                category="Restaurante / Lanchonete / Bar",
+                amount_brl=40.00,
+                row_hash="svt-1",
+            ),
+            _tx_row(
+                account.id,
+                job.id,
+                description="Pix to friend",
+                category="Transferência / Pix",
+                amount_brl=100.00,
+                row_hash="svt-2",
+            ),
+            _tx_row(
+                account.id,
+                job.id,
+                description="Fatura payment",
+                category="Pagamento de Fatura",
+                amount_brl=500.00,
+                row_hash="svt-3",
+            ),
+        ]
+    )
+
+    result = await repo.get_spend_vs_transfers(bank="nubank")
+
+    assert result["spend_total"] == 40.00
+    assert result["spend_count"] == 1
+    assert result["transfer_total"] == 600.00
+    assert result["transfer_count"] == 2
+    assert result["by_category"] == [
+        {"category": "Restaurante / Lanchonete / Bar", "total": 40.00, "count": 1}
+    ]
+
+
+# ── get_transaction_detail ───────────────────────────────────────────────────
+
+
+async def test_get_transaction_detail_returns_full_audit_trail(db_session: AsyncSession) -> None:
+    repo = BankingRepository(db_session)
+    account = await repo.get_or_create_account("nubank", "1234", "Felipe")
+    job = await repo.create_import_job(
+        bank_account_id=account.id,
+        source_type="gmail",
+        source_ref="msg-detail",
+        billing_date=date(2026, 6, 1),
+        row_count=1,
+    )
+    row = _tx_row(account.id, job.id, description="Uber Trip", row_hash="detail-hash")
+    await repo.bulk_insert_transactions([row])
+
+    detail = await repo.get_transaction_detail(row["id"])
+
+    assert detail is not None
+    assert detail.transaction.description == "Uber Trip"
+    assert detail.transaction.row_hash == "detail-hash"
+    assert detail.account.bank == "nubank"
+    assert detail.import_job.source_ref == "msg-detail"
+
+
+async def test_get_transaction_detail_returns_none_for_unknown_id(
+    db_session: AsyncSession,
+) -> None:
+    repo = BankingRepository(db_session)
+    assert await repo.get_transaction_detail(uuid.uuid4()) is None

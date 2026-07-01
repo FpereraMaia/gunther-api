@@ -49,3 +49,12 @@ class Transaction:
     raw: dict[str, Any]
     created_at: datetime
     updated_at: datetime
+
+
+@dataclass
+class TransactionDetail:
+    """A transaction plus the account and import job it came from."""
+
+    transaction: Transaction
+    account: BankAccount
+    import_job: ImportJob

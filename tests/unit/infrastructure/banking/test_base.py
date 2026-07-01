@@ -72,3 +72,42 @@ def test_hash_is_sha256_hex_digest() -> None:
     h = make_row_hash("nubank", date(2026, 6, 15), _tx())
     assert len(h) == 64
     int(h, 16)  # raises ValueError if not valid hex
+
+
+# ── external_id dedup ─────────────────────────────────────────────────────────
+
+
+def test_external_id_present_ignores_billing_date_differences() -> None:
+    tx = _tx(external_id="abc-123")
+    assert make_row_hash("nubank", date(2026, 6, 15), tx) == make_row_hash(
+        "nubank", date(2026, 7, 15), tx
+    )
+
+
+def test_external_id_with_different_amount_changes_hash() -> None:
+    # Nubank reuses one id across a pair of linked legs (e.g. "added funds" +
+    # the payment it funded) — amount must stay part of the key so both survive.
+    billing_date = date(2026, 6, 15)
+    tx1 = _tx(external_id="abc-123", amount_brl=Decimal("121.47"))
+    tx2 = _tx(external_id="abc-123", amount_brl=Decimal("-121.47"))
+    assert make_row_hash("nubank", billing_date, tx1) != make_row_hash("nubank", billing_date, tx2)
+
+
+def test_external_id_with_different_date_changes_hash() -> None:
+    tx1 = _tx(external_id="abc-123", date=date(2026, 6, 10))
+    tx2 = _tx(external_id="abc-123", date=date(2026, 6, 11))
+    billing_date = date(2026, 6, 15)
+    assert make_row_hash("nubank", billing_date, tx1) != make_row_hash("nubank", billing_date, tx2)
+
+
+def test_different_external_id_changes_hash() -> None:
+    billing_date = date(2026, 6, 15)
+    tx1 = _tx(external_id="abc-123")
+    tx2 = _tx(external_id="def-456")
+    assert make_row_hash("nubank", billing_date, tx1) != make_row_hash("nubank", billing_date, tx2)
+
+
+def test_external_id_scoped_by_bank() -> None:
+    billing_date = date(2026, 6, 15)
+    tx = _tx(external_id="abc-123")
+    assert make_row_hash("nubank", billing_date, tx) != make_row_hash("c6", billing_date, tx)

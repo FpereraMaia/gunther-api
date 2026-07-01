@@ -22,6 +22,7 @@ _SEARCH = f"from:{_SENDER} has:attachment filename:zip"
 class C6Importer:
     gmail: GmailClient
     bank: str = "c6"
+    account_type: str = "credit_card"
     zip_password: str = ""
 
     def fetch_new_sources(self, seen_refs: set[str]) -> list[RawSource]:

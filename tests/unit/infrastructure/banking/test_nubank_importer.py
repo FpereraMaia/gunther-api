@@ -129,3 +129,17 @@ def test_fetch_new_sources_skips_seen_refs() -> None:
     assert [s.source_ref for s in sources] == ["msg-2"]
     assert sources[0].billing_date == date(2026, 7, 1)
     assert sources[0].data == b"data2"
+
+
+def test_fetch_new_sources_ignores_account_extract_attachments() -> None:
+    # Same sender/search as NubankAccountImporter's — must not claim its files.
+    gmail = MagicMock()
+    gmail.fetch_attachments.return_value = [
+        ("msg-1", "NU_70254102_01JAN2026_31JAN2026.csv", b"extract"),
+        ("msg-2", "Nubank_2026-07-01.csv", b"invoice"),
+    ]
+    importer = NubankImporter(gmail=gmail)
+
+    sources = importer.fetch_new_sources(seen_refs=set())
+
+    assert [s.source_ref for s in sources] == ["msg-2"]

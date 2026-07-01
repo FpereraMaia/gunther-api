@@ -11,6 +11,9 @@ from decimal import Decimal, InvalidOperation
 from app.infrastructure.banking.gmail.client import GmailClient
 from app.infrastructure.banking.importers.base import ParsedTransaction, RawSource
 from app.infrastructure.banking.importers.categorizer import infer_category
+from app.infrastructure.banking.importers.nubank_account import (
+    FILENAME_RE as _ACCOUNT_EXTRACT_FILENAME_RE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +26,13 @@ _PARCELA_RE = re.compile(r"^(.+?)\s*-\s*Parcela\s+(\d+)/(\d+)\s*$", re.IGNORECAS
 class NubankImporter:
     gmail: GmailClient
     bank: str = "nubank"
+    account_type: str = "credit_card"
 
     def fetch_new_sources(self, seen_refs: set[str]) -> list[RawSource]:
         sources: list[RawSource] = []
         for msg_id, filename, data in self.gmail.fetch_attachments(_SEARCH, ext=".csv"):
+            if _ACCOUNT_EXTRACT_FILENAME_RE.match(filename):
+                continue  # account-extract attachment — handled by NubankAccountImporter
             if msg_id in seen_refs:
                 logger.info("nubank.skip_known", extra={"msg_id": msg_id})
                 continue

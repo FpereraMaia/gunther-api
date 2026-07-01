@@ -48,3 +48,14 @@ def test_uber_eats_matches_food_delivery_before_transport_rule() -> None:
 
 def test_plain_uber_matches_transport_rule() -> None:
     assert infer_category("UBER *TRIP 123") == "Transporte"
+
+
+def test_99_embedded_in_account_number_does_not_match_transport_rule() -> None:
+    # Regression: bare "99" used to match any digit run containing it, so Pix
+    # descriptions with account numbers like "...Conta: 93879934-4" were
+    # miscategorized as "Transporte" just because "99" appears inside the number.
+    description = (
+        "Transferência enviada pelo Pix - Victor Gomes - •••.655.849-•• "
+        "- NU PAGAMENTOS - IP (0260) Agência: 1 Conta: 93879934-4"
+    )
+    assert infer_category(description) == "Transferência / Pix"

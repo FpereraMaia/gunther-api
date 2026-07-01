@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import re
 
+# Categories that represent money moving between the user's own accounts
+# (Pix to self / paying off a card already tracked elsewhere) rather than
+# real spend. Used to keep spend totals from being inflated by transfers.
+TRANSFER_CATEGORIES = frozenset({"Transferência / Pix", "Pagamento de Fatura"})
+
 # (pattern, category) — matched case-insensitively against description
 # Order matters: first match wins
 _RULES: list[tuple[str, str]] = [
@@ -31,7 +36,13 @@ _RULES: list[tuple[str, str]] = [
         "Relacionados a Automotivo",
     ),
     # Transport / ride
-    (r"uber|99|cabify|taxi|táxi|metrô|metro|onibus|ônibus|passagem|buser", "Transporte"),
+    # "99" (the ride-hailing app) must not match digits embedded in longer numbers
+    # (account/document numbers in Pix descriptions), so it's bounded by lookarounds
+    # rather than \b — 99POP has no \w boundary between "99" and "POP" either.
+    (
+        r"uber|(?<!\d)99(?!\d)|cabify|taxi|táxi|metrô|metro|onibus|ônibus|passagem|buser",
+        "Transporte",
+    ),
     # Marketplace / retail
     (
         r"mercadolivre|mercado livre|shopee|amazon|aliexpress|shein|magazine|magalu|americanas"
@@ -64,6 +75,10 @@ _RULES: list[tuple[str, str]] = [
     ),
     # Lottery / gambling
     (r"loteria|loterica|lotérica|apostas", "Lazer / Jogos"),
+    # Credit-card bill payment via account extract — tracked separately by the card
+    # import, so keep it out of the generic "Transferência / Pix" bucket to avoid
+    # double-counting it as spend.
+    (r"pagamento de fatura", "Pagamento de Fatura"),
     # PIX to individuals (CNPJ pattern XX.XXX.XXX or personal names via NuPay with no other match)
     (
         r"pix no crédito|pix no credito|transferência|transferencia|\d{2}\.\d{3}\.\d{3}.*nupay",

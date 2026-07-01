@@ -40,7 +40,9 @@ async def sync_bank(
             # ZIP decryption + CSV parsing is also sync
             card_last4, transactions = await asyncio.to_thread(importer.parse, source)
 
-            account = await repo.get_or_create_account(importer.bank, card_last4, owner_name)
+            account = await repo.get_or_create_account(
+                importer.bank, card_last4, owner_name, account_type=importer.account_type
+            )
 
             job = await repo.create_import_job(
                 bank_account_id=account.id,

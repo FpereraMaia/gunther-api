@@ -5,11 +5,12 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, func, select, update
+from sqlalchemy import CursorResult, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.banking.entities import BankAccount, ImportJob, Transaction
+from app.domain.banking.entities import BankAccount, ImportJob, Transaction, TransactionDetail
+from app.infrastructure.banking.importers.categorizer import TRANSFER_CATEGORIES
 from app.infrastructure.database.banking.models import (
     BankAccountModel,
     ImportJobModel,
@@ -24,7 +25,11 @@ class BankingRepository:
     # ── BankAccount ───────────────────────────────────────────────────────────
 
     async def get_or_create_account(
-        self, bank: str, card_last4: str, owner_name: str
+        self,
+        bank: str,
+        card_last4: str,
+        owner_name: str,
+        account_type: str = "credit_card",
     ) -> BankAccount:
         result = await self._s.execute(
             select(BankAccountModel).where(
@@ -34,7 +39,9 @@ class BankingRepository:
         )
         model = result.scalar_one_or_none()
         if model is None:
-            model = BankAccountModel(bank=bank, card_last4=card_last4, owner_name=owner_name)
+            model = BankAccountModel(
+                bank=bank, card_last4=card_last4, owner_name=owner_name, account_type=account_type
+            )
             self._s.add(model)
             await self._s.flush()
             await self._s.refresh(model)
@@ -138,6 +145,7 @@ class BankingRepository:
     async def list_transactions(
         self,
         bank: str | None = None,
+        account_type: str | None = None,
         from_date: date | None = None,
         to_date: date | None = None,
         category: str | None = None,
@@ -148,6 +156,8 @@ class BankingRepository:
         q = select(TransactionModel).join(BankAccountModel)
         if bank:
             q = q.where(BankAccountModel.bank == bank)
+        if account_type:
+            q = q.where(BankAccountModel.account_type == account_type)
         if card_last4:
             q = q.where(BankAccountModel.card_last4 == card_last4)
         if from_date:
@@ -171,6 +181,7 @@ class BankingRepository:
         from_date: date | None = None,
         to_date: date | None = None,
         bank: str | None = None,
+        account_type: str | None = None,
     ) -> list[dict[str, Any]]:
         q = (
             select(
@@ -186,6 +197,8 @@ class BankingRepository:
         )
         if bank:
             q = q.where(BankAccountModel.bank == bank)
+        if account_type:
+            q = q.where(BankAccountModel.account_type == account_type)
         if from_date:
             q = q.where(TransactionModel.date >= from_date)
         if to_date:
@@ -202,6 +215,7 @@ class BankingRepository:
         from_date: date | None = None,
         to_date: date | None = None,
         bank: str | None = None,
+        account_type: str | None = None,
         category: str | None = None,
         min_total: float | None = None,
     ) -> list[dict[str, Any]]:
@@ -222,6 +236,8 @@ class BankingRepository:
         )
         if bank:
             q = q.where(BankAccountModel.bank == bank)
+        if account_type:
+            q = q.where(BankAccountModel.account_type == account_type)
         if category:
             q = q.where(TransactionModel.category == category)
         if from_date:
@@ -242,6 +258,124 @@ class BankingRepository:
             }
             for r in rows
         ]
+
+    async def get_monthly_cash_flow(
+        self,
+        from_date: date | None = None,
+        to_date: date | None = None,
+        bank: str | None = None,
+        account_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Income vs. expense per month (positive amount_brl = spend convention)."""
+        month = func.date_trunc("month", TransactionModel.date).label("month")
+        q = (
+            select(
+                month,
+                func.sum(func.greatest(TransactionModel.amount_brl, 0)).label("expense"),
+                func.sum(func.greatest(-TransactionModel.amount_brl, 0)).label("income"),
+                func.count(TransactionModel.id).label("tx_count"),
+            )
+            .join(BankAccountModel)
+            .group_by(month)
+            .order_by(month)
+        )
+        if bank:
+            q = q.where(BankAccountModel.bank == bank)
+        if account_type:
+            q = q.where(BankAccountModel.account_type == account_type)
+        if from_date:
+            q = q.where(TransactionModel.date >= from_date)
+        if to_date:
+            q = q.where(TransactionModel.date <= to_date)
+
+        rows = (await self._s.execute(q)).all()
+        return [
+            {
+                "month": r.month.date(),
+                "income": round(float(r.income), 2),
+                "expense": round(float(r.expense), 2),
+                "net": round(float(r.income) - float(r.expense), 2),
+                "count": r.tx_count,
+            }
+            for r in rows
+        ]
+
+    async def get_spend_vs_transfers(
+        self,
+        from_date: date | None = None,
+        to_date: date | None = None,
+        bank: str | None = None,
+        account_type: str | None = None,
+    ) -> dict[str, Any]:
+        """Splits real spend from transfers (see `TRANSFER_CATEGORIES`)."""
+        not_transfer = or_(
+            TransactionModel.category.is_(None),
+            TransactionModel.category.notin_(TRANSFER_CATEGORIES),
+        )
+
+        def _apply_filters(q: Any) -> Any:
+            if bank:
+                q = q.where(BankAccountModel.bank == bank)
+            if account_type:
+                q = q.where(BankAccountModel.account_type == account_type)
+            if from_date:
+                q = q.where(TransactionModel.date >= from_date)
+            if to_date:
+                q = q.where(TransactionModel.date <= to_date)
+            return q
+
+        category_q = _apply_filters(
+            select(
+                TransactionModel.category,
+                func.sum(TransactionModel.amount_brl).label("total"),
+                func.count(TransactionModel.id).label("tx_count"),
+            )
+            .join(BankAccountModel)
+            .where(TransactionModel.amount_brl > 0)
+            .where(not_transfer)
+            .group_by(TransactionModel.category)
+            .order_by(func.sum(TransactionModel.amount_brl).desc())
+        )
+        by_category = [
+            {"category": r.category, "total": round(float(r.total), 2), "count": r.tx_count}
+            for r in (await self._s.execute(category_q)).all()
+        ]
+
+        transfer_q = _apply_filters(
+            select(
+                func.coalesce(func.sum(TransactionModel.amount_brl), 0).label("total"),
+                func.count(TransactionModel.id).label("tx_count"),
+            )
+            .join(BankAccountModel)
+            .where(TransactionModel.amount_brl > 0)
+            .where(TransactionModel.category.in_(TRANSFER_CATEGORIES))
+        )
+        transfer_row = (await self._s.execute(transfer_q)).one()
+
+        return {
+            "spend_total": round(sum(c["total"] for c in by_category), 2),
+            "spend_count": sum(c["count"] for c in by_category),
+            "transfer_total": round(float(transfer_row.total), 2),
+            "transfer_count": transfer_row.tx_count,
+            "by_category": by_category,
+        }
+
+    async def get_transaction_detail(self, transaction_id: uuid.UUID) -> TransactionDetail | None:
+        row = (
+            await self._s.execute(
+                select(TransactionModel, ImportJobModel, BankAccountModel)
+                .join(ImportJobModel, TransactionModel.import_job_id == ImportJobModel.id)
+                .join(BankAccountModel, TransactionModel.bank_account_id == BankAccountModel.id)
+                .where(TransactionModel.id == transaction_id)
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        return TransactionDetail(
+            transaction=self._tx_to_entity(row.TransactionModel),
+            account=self._account_to_entity(row.BankAccountModel),
+            import_job=self._job_to_entity(row.ImportJobModel),
+        )
 
     # ── Converters ────────────────────────────────────────────────────────────
 

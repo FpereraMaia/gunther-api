@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import uuid
 from datetime import date
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.banking.use_cases.backfill_categories import backfill_nubank_categories
@@ -13,11 +14,14 @@ from app.infrastructure.database.session import get_db_session
 from app.infrastructure.security.auth import UserContext, get_user
 from app.presentation.api.v1.banking.schemas import (
     BankAccountResponse,
+    CashFlowEntry,
     DescriptionSummaryEntry,
     ImportJobResponse,
     PaginatedTransactionsResponse,
+    SpendVsTransfersResponse,
     SummaryEntry,
     SyncResponse,
+    TransactionDetailResponse,
     TransactionResponse,
 )
 from app.shared.config import settings
@@ -57,14 +61,26 @@ def _nubank_importer() -> BankImporter:
     return NubankImporter(gmail=_gmail_client())
 
 
-_IMPORTERS = {"c6": _c6_importer, "nubank": _nubank_importer}
+def _nubank_account_importer() -> BankImporter:
+    from app.infrastructure.banking.importers.nubank_account import NubankAccountImporter
+
+    return NubankAccountImporter(gmail=_gmail_client())
+
+
+_IMPORTERS = {
+    "c6": _c6_importer,
+    "nubank": _nubank_importer,
+    "nubank_account": _nubank_account_importer,
+}
 
 
 @router.post("/sync", response_model=SyncResponse)
 async def sync(
     user: _Auth,
     session: _DB,
-    bank: str = Query(description="Bank to sync: c6, nubank, or 'all'", default="all"),
+    bank: str = Query(
+        description="Bank to sync: c6, nubank, nubank_account, or 'all'", default="all"
+    ),
 ) -> SyncResponse:
     banks = list(_IMPORTERS.keys()) if bank == "all" else [bank]
     combined = SyncResponse(
@@ -135,6 +151,9 @@ async def list_transactions(
     user: _Auth,
     session: _DB,
     bank: str | None = Query(default=None),
+    account_type: str | None = Query(
+        default=None, description="Filter by account type: checking or credit_card"
+    ),
     card_last4: str | None = Query(default=None),
     from_date: date | None = Query(default=None),
     to_date: date | None = Query(default=None),
@@ -145,6 +164,7 @@ async def list_transactions(
     repo = BankingRepository(session)
     txs, total = await repo.list_transactions(
         bank=bank,
+        account_type=account_type,
         from_date=from_date,
         to_date=to_date,
         category=category,
@@ -185,6 +205,7 @@ async def summary_by_description(
     from_date: date | None = Query(default=None),
     to_date: date | None = Query(default=None),
     bank: str | None = Query(default=None),
+    account_type: str | None = Query(default=None),
     category: str | None = Query(default=None),
     min_total: float | None = Query(
         default=None, description="Filter descriptions with total above this value"
@@ -195,10 +216,27 @@ async def summary_by_description(
         from_date=from_date,
         to_date=to_date,
         bank=bank,
+        account_type=account_type,
         category=category,
         min_total=min_total,
     )
     return [DescriptionSummaryEntry(**r) for r in rows]
+
+
+@router.get("/summary/spend-vs-transfers", response_model=SpendVsTransfersResponse)
+async def summary_spend_vs_transfers(
+    user: _Auth,
+    session: _DB,
+    from_date: date | None = Query(default=None),
+    to_date: date | None = Query(default=None),
+    bank: str | None = Query(default=None),
+    account_type: str | None = Query(default=None),
+) -> SpendVsTransfersResponse:
+    repo = BankingRepository(session)
+    result = await repo.get_spend_vs_transfers(
+        from_date=from_date, to_date=to_date, bank=bank, account_type=account_type
+    )
+    return SpendVsTransfersResponse(**result)
 
 
 @router.get("/summary", response_model=list[SummaryEntry])
@@ -208,7 +246,57 @@ async def get_summary(
     from_date: date | None = Query(default=None),
     to_date: date | None = Query(default=None),
     bank: str | None = Query(default=None),
+    account_type: str | None = Query(default=None),
 ) -> list[SummaryEntry]:
     repo = BankingRepository(session)
-    rows = await repo.get_summary(from_date=from_date, to_date=to_date, bank=bank)
+    rows = await repo.get_summary(
+        from_date=from_date, to_date=to_date, bank=bank, account_type=account_type
+    )
     return [SummaryEntry(**r) for r in rows]
+
+
+@router.get("/cash-flow", response_model=list[CashFlowEntry])
+async def cash_flow(
+    user: _Auth,
+    session: _DB,
+    from_date: date | None = Query(default=None),
+    to_date: date | None = Query(default=None),
+    bank: str | None = Query(default=None),
+    account_type: str | None = Query(default=None),
+) -> list[CashFlowEntry]:
+    repo = BankingRepository(session)
+    rows = await repo.get_monthly_cash_flow(
+        from_date=from_date, to_date=to_date, bank=bank, account_type=account_type
+    )
+    return [CashFlowEntry(**r) for r in rows]
+
+
+@router.get("/transactions/{transaction_id}", response_model=TransactionDetailResponse)
+async def get_transaction(
+    transaction_id: uuid.UUID, user: _Auth, session: _DB
+) -> TransactionDetailResponse:
+    repo = BankingRepository(session)
+    detail = await repo.get_transaction_detail(transaction_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    return TransactionDetailResponse(
+        id=detail.transaction.id,
+        bank=detail.account.bank,
+        account_type=detail.account.account_type,
+        card_last4=detail.account.card_last4,
+        date=detail.transaction.date,
+        description=detail.transaction.description,
+        category=detail.transaction.category,
+        amount_brl=detail.transaction.amount_brl,
+        amount_usd=detail.transaction.amount_usd,
+        exchange_rate=detail.transaction.exchange_rate,
+        installment_current=detail.transaction.installment_current,
+        installment_total=detail.transaction.installment_total,
+        row_hash=detail.transaction.row_hash,
+        raw=detail.transaction.raw,
+        import_job_id=detail.import_job.id,
+        import_source_ref=detail.import_job.source_ref,
+        import_billing_date=detail.import_job.billing_date,
+        imported_at=detail.import_job.imported_at,
+    )
