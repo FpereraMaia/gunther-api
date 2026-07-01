@@ -5,7 +5,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, select
+from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,6 +46,14 @@ class BankingRepository:
         ).scalars()
         return [self._account_to_entity(m) for m in rows]
 
+    async def list_accounts_by_ids(self, ids: set[uuid.UUID]) -> dict[uuid.UUID, BankAccount]:
+        if not ids:
+            return {}
+        rows = (
+            await self._s.execute(select(BankAccountModel).where(BankAccountModel.id.in_(ids)))
+        ).scalars()
+        return {m.id: self._account_to_entity(m) for m in rows}
+
     # ── ImportJob ─────────────────────────────────────────────────────────────
 
     async def source_ref_exists(self, source_ref: str) -> bool:
@@ -85,6 +93,16 @@ class BankingRepository:
         rows = (await self._s.execute(q.order_by(ImportJobModel.billing_date.desc()))).scalars()
         return [self._job_to_entity(m) for m in rows]
 
+    async def list_import_jobs_with_bank(
+        self, bank: str | None = None
+    ) -> list[tuple[ImportJob, str]]:
+        q = select(ImportJobModel, BankAccountModel.bank).join(BankAccountModel)
+        if bank:
+            q = q.where(BankAccountModel.bank == bank)
+        q = q.order_by(ImportJobModel.billing_date.desc())
+        rows = (await self._s.execute(q)).all()
+        return [(self._job_to_entity(row.ImportJobModel), row.bank) for row in rows]
+
     # ── Transaction ───────────────────────────────────────────────────────────
 
     async def bulk_insert_transactions(self, rows: list[dict[str, Any]]) -> int:
@@ -99,6 +117,24 @@ class BankingRepository:
         result = cast(CursorResult[Any], await self._s.execute(stmt))
         return result.rowcount
 
+    async def list_uncategorized_transactions(self, bank: str) -> list[tuple[uuid.UUID, str]]:
+        rows = (
+            await self._s.execute(
+                select(TransactionModel.id, TransactionModel.description)
+                .join(BankAccountModel)
+                .where(BankAccountModel.bank == bank)
+                .where(TransactionModel.category.is_(None))
+            )
+        ).all()
+        return [(r.id, r.description) for r in rows]
+
+    async def update_transaction_category(self, transaction_id: uuid.UUID, category: str) -> None:
+        await self._s.execute(
+            update(TransactionModel)
+            .where(TransactionModel.id == transaction_id)
+            .values(category=category)
+        )
+
     async def list_transactions(
         self,
         bank: str | None = None,
@@ -109,8 +145,6 @@ class BankingRepository:
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[Transaction], int]:
-        from sqlalchemy import func as sqlfunc
-
         q = select(TransactionModel).join(BankAccountModel)
         if bank:
             q = q.where(BankAccountModel.bank == bank)
@@ -123,9 +157,7 @@ class BankingRepository:
         if category:
             q = q.where(TransactionModel.category == category)
 
-        total = (
-            await self._s.execute(select(sqlfunc.count()).select_from(q.subquery()))
-        ).scalar_one()
+        total = (await self._s.execute(select(func.count()).select_from(q.subquery()))).scalar_one()
 
         rows = (
             await self._s.execute(
@@ -140,19 +172,17 @@ class BankingRepository:
         to_date: date | None = None,
         bank: str | None = None,
     ) -> list[dict[str, Any]]:
-        from sqlalchemy import func as sqlfunc
-
         q = (
             select(
                 BankAccountModel.bank,
                 TransactionModel.category,
-                sqlfunc.sum(TransactionModel.amount_brl).label("total"),
-                sqlfunc.count(TransactionModel.id).label("tx_count"),
+                func.sum(TransactionModel.amount_brl).label("total"),
+                func.count(TransactionModel.id).label("tx_count"),
             )
             .join(BankAccountModel)
             .where(TransactionModel.amount_brl > 0)
             .group_by(BankAccountModel.bank, TransactionModel.category)
-            .order_by(sqlfunc.sum(TransactionModel.amount_brl).desc())
+            .order_by(func.sum(TransactionModel.amount_brl).desc())
         )
         if bank:
             q = q.where(BankAccountModel.bank == bank)
@@ -164,6 +194,52 @@ class BankingRepository:
         rows = (await self._s.execute(q)).all()
         return [
             {"bank": r.bank, "category": r.category, "total": float(r.total), "count": r.tx_count}
+            for r in rows
+        ]
+
+    async def get_summary_by_description(
+        self,
+        from_date: date | None = None,
+        to_date: date | None = None,
+        bank: str | None = None,
+        category: str | None = None,
+        min_total: float | None = None,
+    ) -> list[dict[str, Any]]:
+        q = (
+            select(
+                BankAccountModel.bank,
+                TransactionModel.description,
+                TransactionModel.category,
+                func.sum(TransactionModel.amount_brl).label("total"),
+                func.count(TransactionModel.id).label("tx_count"),
+            )
+            .join(BankAccountModel)
+            .where(TransactionModel.amount_brl > 0)
+            .group_by(
+                BankAccountModel.bank, TransactionModel.description, TransactionModel.category
+            )
+            .order_by(func.sum(TransactionModel.amount_brl).desc())
+        )
+        if bank:
+            q = q.where(BankAccountModel.bank == bank)
+        if category:
+            q = q.where(TransactionModel.category == category)
+        if from_date:
+            q = q.where(TransactionModel.date >= from_date)
+        if to_date:
+            q = q.where(TransactionModel.date <= to_date)
+        if min_total:
+            q = q.having(func.sum(TransactionModel.amount_brl) >= min_total)
+
+        rows = (await self._s.execute(q)).all()
+        return [
+            {
+                "bank": r.bank,
+                "description": r.description,
+                "category": r.category,
+                "total": round(float(r.total), 2),
+                "count": r.tx_count,
+            }
             for r in rows
         ]
 

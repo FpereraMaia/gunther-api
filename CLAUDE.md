@@ -57,6 +57,10 @@ The banking feature does not follow the standard Clean Architecture repository p
 
 The Gmail API client is synchronous (googleapis limitation). `sync_bank` wraps both `fetch_new_sources` and `parse` in `asyncio.to_thread()`.
 
+**Skipping the `IBankingRepository` Protocol does not mean skipping the repository.** All SQLAlchemy access — `select()`/`update()`/ORM model imports — must live in `BankingRepository`. Routers (`presentation/api/v1/banking/router.py`) and use cases (`application/banking/use_cases/*.py`) call repository methods only; they must never import `infrastructure.database.banking.models` or build queries with `session.execute()` directly. If a repository method doesn't exist yet for what a caller needs, add it to `BankingRepository` rather than querying inline. (This was violated twice in practice — raw queries in router GET handlers and in `backfill_categories.py` — before being fixed by moving the logic into repository methods.)
+
+Import convention in this router: top-level imports by default. The only justified exception is deferring imports of the Gmail/importer stack (`GmailClient`, `C6Importer`, `NubankImporter`) inside their factory functions — they pull in heavy optional deps (`googleapiclient`, `google-auth`, `pyzipper`) that non-sync endpoints shouldn't pay for. Don't add new local imports for anything else without that same justification.
+
 ## Deduplication
 
 Transactions are deduplicated via `row_hash` — a SHA-256 of `(bank, billing_date, tx_date, description, amount_brl_cents, installment_current, installment_total)`. `bulk_insert_transactions` uses PostgreSQL `INSERT ... ON CONFLICT (row_hash) DO NOTHING` and returns the actual inserted count. Re-syncing the same Gmail messages is safe.

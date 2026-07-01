@@ -6,6 +6,9 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.banking.use_cases.backfill_categories import backfill_nubank_categories
+from app.application.banking.use_cases.sync_bank import sync_bank
+from app.infrastructure.database.banking.repository import BankingRepository
 from app.infrastructure.database.session import get_db_session
 from app.infrastructure.security.auth import UserContext, get_user
 from app.presentation.api.v1.banking.schemas import (
@@ -63,8 +66,6 @@ async def sync(
     session: _DB,
     bank: str = Query(description="Bank to sync: c6, nubank, or 'all'", default="all"),
 ) -> SyncResponse:
-    from app.application.banking.use_cases.sync_bank import sync_bank
-
     banks = list(_IMPORTERS.keys()) if bank == "all" else [bank]
     combined = SyncResponse(
         bank=bank, sources_found=0, sources_imported=0, transactions_inserted=0, errors=[]
@@ -86,16 +87,12 @@ async def sync(
 
 @router.post("/backfill-categories", response_model=dict)
 async def backfill_categories(user: _Auth, session: _DB) -> dict[str, int]:
-    from app.application.banking.use_cases.backfill_categories import backfill_nubank_categories
-
     updated = await backfill_nubank_categories(session)
     return {"updated": updated}
 
 
 @router.get("/accounts", response_model=list[BankAccountResponse])
 async def list_accounts(user: _Auth, session: _DB) -> list[BankAccountResponse]:
-    from app.infrastructure.database.banking.repository import BankingRepository
-
     repo = BankingRepository(session)
     accounts = await repo.list_accounts()
     return [
@@ -116,27 +113,20 @@ async def list_statements(
     session: _DB,
     bank: str | None = Query(default=None),
 ) -> list[ImportJobResponse]:
-    from sqlalchemy import select
-
-    from app.infrastructure.database.banking.models import BankAccountModel, ImportJobModel
-
-    q = select(ImportJobModel, BankAccountModel.bank).join(BankAccountModel)
-    if bank:
-        q = q.where(BankAccountModel.bank == bank)
-    q = q.order_by(ImportJobModel.billing_date.desc())
-    rows = (await session.execute(q)).all()
+    repo = BankingRepository(session)
+    jobs = await repo.list_import_jobs_with_bank(bank=bank)
 
     return [
         ImportJobResponse(
-            id=row.ImportJobModel.id,
-            bank=row.bank,
-            source_ref=row.ImportJobModel.source_ref,
-            billing_date=row.ImportJobModel.billing_date,
-            row_count=row.ImportJobModel.row_count,
-            status=row.ImportJobModel.status,
-            imported_at=row.ImportJobModel.imported_at,
+            id=job.id,
+            bank=job_bank,
+            source_ref=job.source_ref,
+            billing_date=job.billing_date,
+            row_count=job.row_count,
+            status=job.status,
+            imported_at=job.imported_at,
         )
-        for row in rows
+        for job, job_bank in jobs
     ]
 
 
@@ -152,9 +142,6 @@ async def list_transactions(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> PaginatedTransactionsResponse:
-    from app.infrastructure.database.banking.models import BankAccountModel
-    from app.infrastructure.database.banking.repository import BankingRepository
-
     repo = BankingRepository(session)
     txs, total = await repo.list_transactions(
         bank=bank,
@@ -166,18 +153,7 @@ async def list_transactions(
         limit=limit,
     )
 
-    # fetch bank/card info per transaction via account ids
-    account_ids = {tx.bank_account_id for tx in txs}
-    from sqlalchemy import select
-
-    accounts = {
-        m.id: m
-        for m in (
-            await session.execute(
-                select(BankAccountModel).where(BankAccountModel.id.in_(account_ids))
-            )
-        ).scalars()
-    }
+    accounts = await repo.list_accounts_by_ids({tx.bank_account_id for tx in txs})
 
     return PaginatedTransactionsResponse(
         items=[
@@ -214,45 +190,15 @@ async def summary_by_description(
         default=None, description="Filter descriptions with total above this value"
     ),
 ) -> list[DescriptionSummaryEntry]:
-    from sqlalchemy import func, select
-
-    from app.infrastructure.database.banking.models import BankAccountModel, TransactionModel
-
-    q = (
-        select(
-            BankAccountModel.bank,
-            TransactionModel.description,
-            TransactionModel.category,
-            func.sum(TransactionModel.amount_brl).label("total"),
-            func.count(TransactionModel.id).label("tx_count"),
-        )
-        .join(BankAccountModel)
-        .where(TransactionModel.amount_brl > 0)
-        .group_by(BankAccountModel.bank, TransactionModel.description, TransactionModel.category)
-        .order_by(func.sum(TransactionModel.amount_brl).desc())
+    repo = BankingRepository(session)
+    rows = await repo.get_summary_by_description(
+        from_date=from_date,
+        to_date=to_date,
+        bank=bank,
+        category=category,
+        min_total=min_total,
     )
-    if bank:
-        q = q.where(BankAccountModel.bank == bank)
-    if category:
-        q = q.where(TransactionModel.category == category)
-    if from_date:
-        q = q.where(TransactionModel.date >= from_date)
-    if to_date:
-        q = q.where(TransactionModel.date <= to_date)
-    if min_total:
-        q = q.having(func.sum(TransactionModel.amount_brl) >= min_total)
-
-    rows = (await session.execute(q)).all()
-    return [
-        DescriptionSummaryEntry(
-            bank=r.bank,
-            description=r.description,
-            category=r.category,
-            total=round(float(r.total), 2),
-            count=r.tx_count,
-        )
-        for r in rows
-    ]
+    return [DescriptionSummaryEntry(**r) for r in rows]
 
 
 @router.get("/summary", response_model=list[SummaryEntry])
@@ -263,8 +209,6 @@ async def get_summary(
     to_date: date | None = Query(default=None),
     bank: str | None = Query(default=None),
 ) -> list[SummaryEntry]:
-    from app.infrastructure.database.banking.repository import BankingRepository
-
     repo = BankingRepository(session)
     rows = await repo.get_summary(from_date=from_date, to_date=to_date, bank=bank)
     return [SummaryEntry(**r) for r in rows]
