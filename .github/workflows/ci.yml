@@ -153,10 +153,9 @@ jobs:
         run: |
           uv run schemathesis run \
             http://localhost:8000/openapi.json \
-            --validate-schema=true \
             --checks=all \
-            --hypothesis-max-examples=50 \
-            --hypothesis-seed=42
+            --max-examples=50 \
+            --seed=42
 
   # ── Docker build & scan ────────────────────────────────────────────────────────
   build:
@@ -165,6 +164,7 @@ jobs:
     permissions:
       contents: read
       security-events: write
+      actions: read
 
     steps:
       - uses: actions/checkout@v4
@@ -193,7 +193,7 @@ jobs:
           exit-code: "1"
 
       - name: Upload Trivy SARIF to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: trivy-results.sarif
