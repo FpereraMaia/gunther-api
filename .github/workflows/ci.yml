@@ -151,11 +151,15 @@ jobs:
 
       - name: Schemathesis — fuzz API against OpenAPI spec
         run: |
+          # /api/v1/auth/token is excluded: it's an intentional stub (raises
+          # NotImplementedError until the User domain is scaffolded — see
+          # CLAUDE.md), so it always 500s and isn't useful fuzz signal yet.
           uv run schemathesis run \
             http://localhost:8000/openapi.json \
             --checks=all \
             --max-examples=50 \
-            --seed=42
+            --seed=42 \
+            --exclude-path /api/v1/auth/token
 
   # ── Docker build & scan ────────────────────────────────────────────────────────
   build:

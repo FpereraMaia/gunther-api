@@ -8,7 +8,11 @@ from pydantic import BaseModel
 
 from app.infrastructure.security.auth import UserContext, get_user
 
-router = APIRouter(prefix="/api/v1/finance", tags=["finance"])
+router = APIRouter(
+    prefix="/api/v1/finance",
+    tags=["finance"],
+    responses={401: {"description": "Not authenticated"}},
+)
 
 
 class CashEntry(BaseModel):

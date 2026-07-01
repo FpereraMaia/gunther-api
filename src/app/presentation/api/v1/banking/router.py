@@ -23,7 +23,11 @@ if TYPE_CHECKING:
     from app.infrastructure.banking.gmail.client import GmailClient
     from app.infrastructure.banking.importers.base import BankImporter
 
-router = APIRouter(prefix="/api/v1/banking", tags=["banking"])
+router = APIRouter(
+    prefix="/api/v1/banking",
+    tags=["banking"],
+    responses={401: {"description": "Not authenticated"}},
+)
 
 _Auth = Annotated[UserContext, Depends(get_user)]
 _DB = Annotated[AsyncSession, Depends(get_db_session)]
